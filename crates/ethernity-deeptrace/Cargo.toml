@@ -1,0 +1,43 @@
+[package]
+name = "ethernity-deeptrace"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Análise profunda de transações EVM via call traces"
+license.workspace = true
+
+[dependencies]
+# Crates internas
+ethernity-core = { path = "../ethernity-core" }
+ethernity-rpc = { path = "../ethernity-rpc" }
+
+# Ethereum/EVM
+ethers = { workspace = true }
+ethereum-types = { workspace = true }
+web3 = { workspace = true }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+
+# Serialização
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Utilitários
+bytes = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+lru = { workspace = true }
+dashmap = { workspace = true }
+parking_lot = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4.2"
+mockall = "0.11.4"

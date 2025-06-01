@@ -1,0 +1,33 @@
+[package]
+name = "ethernity-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Tipos e utilitários compartilhados para a workspace Ethernity"
+license.workspace = true
+
+[dependencies]
+# Ethereum/EVM
+ethers = { workspace = true }
+ethereum-types = { workspace = true }
+
+# Serialização
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Utilitários
+bytes = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Criptografia
+tiny-keccak = { version = "2.0", features = ["keccak"] }
+rlp = "0.5"
+secp256k1 = { version = "0.27", features = ["recovery"] }
+
+[dev-dependencies]
+tokio = { workspace = true }

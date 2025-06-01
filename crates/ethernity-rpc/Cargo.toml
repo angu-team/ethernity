@@ -1,0 +1,47 @@
+[package]
+name = "ethernity-rpc"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Cliente RPC otimizado para comunicação com nodes Ethereum"
+license.workspace = true
+
+[dependencies]
+# Crates internas
+ethernity-core = { path = "../ethernity-core" }
+
+# Ethereum/EVM
+ethers = { workspace = true }
+ethereum-types = { workspace = true }
+web3 = { workspace = true }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+
+# Serialização
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# HTTP/WebSocket
+reqwest = { version = "0.11.18", features = ["json", "stream"] }
+tokio-tungstenite = "0.19.0"
+
+# Utilitários
+bytes = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+lru = { workspace = true }
+dashmap = { workspace = true }
+parking_lot = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4.2"
+mockall = "0.11.4"
+wiremock = "0.5.19"
