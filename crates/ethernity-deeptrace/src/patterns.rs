@@ -1,13 +1,14 @@
 /*!
  * Ethernity DeepTrace - Patterns
- * 
+ *
  * Detectores de padrões em transações blockchain
  */
 
-use ethernity_core::{Error, Result, types::*};
+use ethernity_core::types::*;
 use crate::{analyzer::TraceAnalysisResult, DetectedPattern, PatternType};
 use async_trait::async_trait;
 use std::collections::HashMap;
+use ethereum_types::{Address, U256};
 
 /// Trait para detectores de padrões
 #[async_trait]
@@ -16,7 +17,7 @@ pub trait PatternDetector: Send + Sync {
     fn pattern_type(&self) -> PatternType;
 
     /// Detecta padrões na análise de trace
-    async fn detect(&self, analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>>;
+    async fn detect(&self, analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>, ()>;
 
     /// Confiança mínima para reportar um padrão
     fn min_confidence(&self) -> f64 {
@@ -39,7 +40,7 @@ impl PatternDetector for Erc20PatternDetector {
         PatternType::Erc20Creation
     }
 
-    async fn detect(&self, analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>> {
+    async fn detect(&self, analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>, ()> {
         let mut patterns = Vec::new();
 
         // Procura por criações de contratos ERC20
@@ -80,7 +81,7 @@ impl PatternDetector for Erc721PatternDetector {
         PatternType::Erc721Creation
     }
 
-    async fn detect(&self, analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>> {
+    async fn detect(&self, analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>, ()> {
         let mut patterns = Vec::new();
 
         // Procura por criações de contratos ERC721
@@ -121,13 +122,13 @@ impl PatternDetector for DexPatternDetector {
         PatternType::TokenSwap
     }
 
-    async fn detect(&self, analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>> {
+    async fn detect(&self, analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>, ()> {
         let mut patterns = Vec::new();
 
         // Procura por padrões de swap (múltiplas transferências de tokens diferentes)
         if analysis.token_transfers.len() >= 2 {
             let mut token_groups: HashMap<Address, Vec<&crate::TokenTransfer>> = HashMap::new();
-            
+
             // Agrupa transferências por token
             for transfer in &analysis.token_transfers {
                 token_groups.entry(transfer.token_address).or_default().push(transfer);
@@ -192,7 +193,7 @@ impl PatternDetector for LendingPatternDetector {
         PatternType::Liquidity
     }
 
-    async fn detect(&self, analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>> {
+    async fn detect(&self, analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>, ()> {
         let mut patterns = Vec::new();
 
         // Procura por padrões de lending (depósitos/retiradas de liquidez)
@@ -201,9 +202,9 @@ impl PatternDetector for LendingPatternDetector {
             if let [transfer1, transfer2] = window {
                 // Verifica se são do mesmo token mas direções opostas
                 if transfer1.token_address == transfer2.token_address &&
-                   transfer1.from == transfer2.to &&
-                   transfer1.to == transfer2.from {
-                    
+                    transfer1.from == transfer2.to &&
+                    transfer1.to == transfer2.from {
+
                     let ratio = if transfer2.amount > U256::zero() {
                         transfer1.amount.as_u128() as f64 / transfer2.amount.as_u128() as f64
                     } else {
@@ -251,7 +252,7 @@ impl PatternDetector for FlashLoanPatternDetector {
         PatternType::FlashLoan
     }
 
-    async fn detect(&self, analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>> {
+    async fn detect(&self, analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>, ()> {
         let mut patterns = Vec::new();
 
         // Flash loans são caracterizados por:
@@ -268,13 +269,13 @@ impl PatternDetector for FlashLoanPatternDetector {
             if first_transfer.token_address == last_transfer.token_address {
                 // Verifica se há repagamento (direção oposta)
                 if first_transfer.to == last_transfer.from &&
-                   first_transfer.from == last_transfer.to {
-                    
+                    first_transfer.from == last_transfer.to {
+
                     // Verifica se o valor do repagamento é maior (incluindo taxa)
                     if last_transfer.amount >= first_transfer.amount {
                         let fee_ratio = if first_transfer.amount > U256::zero() {
-                            (last_transfer.amount - first_transfer.amount).as_u128() as f64 / 
-                            first_transfer.amount.as_u128() as f64
+                            (last_transfer.amount - first_transfer.amount).as_u128() as f64 /
+                                first_transfer.amount.as_u128() as f64
                         } else {
                             0.0
                         };
@@ -321,16 +322,16 @@ impl PatternDetector for MevPatternDetector {
         PatternType::Arbitrage
     }
 
-    async fn detect(&self, analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>> {
+    async fn detect(&self, analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>, ()> {
         let mut patterns = Vec::new();
 
         // MEV patterns incluem arbitragem, frontrunning, etc.
         // Procura por padrões de arbitragem: compra em um lugar, vende em outro
-        
+
         if analysis.token_transfers.len() >= 4 {
             // Agrupa transferências por token
             let mut token_flows: HashMap<Address, Vec<(Address, Address, U256)>> = HashMap::new();
-            
+
             for transfer in &analysis.token_transfers {
                 token_flows.entry(transfer.token_address)
                     .or_default()
@@ -342,7 +343,7 @@ impl PatternDetector for MevPatternDetector {
                 if flows.len() >= 2 {
                     // Verifica se há compra e venda do mesmo token
                     let mut net_flow: HashMap<Address, i128> = HashMap::new();
-                    
+
                     for (from, to, amount) in flows {
                         let amount_i128 = amount.as_u128() as i128;
                         *net_flow.entry(from).or_default() -= amount_i128;
@@ -391,7 +392,7 @@ impl PatternDetector for RugPullPatternDetector {
         PatternType::RugPull
     }
 
-    async fn detect(&self, analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>> {
+    async fn detect(&self, analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>, ()> {
         let mut patterns = Vec::new();
 
         // Rug pulls são caracterizados por:
@@ -407,7 +408,7 @@ impl PatternDetector for RugPullPatternDetector {
 
                 for transfer in &analysis.token_transfers {
                     if transfer.token_address == creation.contract_address &&
-                       transfer.to == creation.creator {
+                        transfer.to == creation.creator {
                         suspicious_transfers.push(transfer);
                         total_to_creator += transfer.amount;
                     }
@@ -455,7 +456,7 @@ impl PatternDetector for GovernancePatternDetector {
         PatternType::Governance
     }
 
-    async fn detect(&self, analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>> {
+    async fn detect(&self, analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>, ()> {
         let mut patterns = Vec::new();
 
         // Padrões de governança são detectados por:
@@ -471,35 +472,33 @@ impl PatternDetector for GovernancePatternDetector {
             &[0x40, 0xe5, 0x8e, 0xe5], // queue(...)
         ];
 
-        for node in &analysis.call_tree.nodes {
-            if let Some(input) = &node.call.input {
-                if input.len() >= 4 {
-                    let function_sig = &input[0..4];
-                    
-                    for &gov_sig in &governance_signatures {
-                        if function_sig == gov_sig {
-                            let mut data = serde_json::Map::new();
-                            data.insert("contract".to_string(), serde_json::Value::String(format!("{:?}", node.call.to.unwrap_or_else(|| Address::zero()))));
-                            data.insert("caller".to_string(), serde_json::Value::String(format!("{:?}", node.call.from)));
-                            data.insert("function_signature".to_string(), serde_json::Value::String(hex::encode(function_sig)));
+        // Percorre a árvore de chamadas procurando por assinaturas de governança
+        analysis.call_tree.traverse_preorder(|node| {
+            if !node.input.is_empty() && node.input.len() >= 4 {
+                let function_sig = &node.input[0..4];
 
-                            let pattern = DetectedPattern {
-                                pattern_type: PatternType::Governance,
-                                confidence: 0.85,
-                                addresses: vec![node.call.from, node.call.to.unwrap_or_else(|| Address::zero())],
-                                data: serde_json::Value::Object(data),
-                                description: "Atividade de governança detectada".to_string(),
-                            };
+                for &gov_sig in &governance_signatures {
+                    if function_sig == gov_sig {
+                        let mut data = serde_json::Map::new();
+                        data.insert("contract".to_string(), serde_json::Value::String(format!("{:?}", node.to.unwrap_or_else(|| Address::zero()))));
+                        data.insert("caller".to_string(), serde_json::Value::String(format!("{:?}", node.from)));
+                        data.insert("function_signature".to_string(), serde_json::Value::String(hex::encode(function_sig)));
 
-                            patterns.push(pattern);
-                            break;
-                        }
+                        let pattern = DetectedPattern {
+                            pattern_type: PatternType::Governance,
+                            confidence: 0.85,
+                            addresses: vec![node.from, node.to.unwrap_or_else(|| Address::zero())],
+                            data: serde_json::Value::Object(data),
+                            description: "Atividade de governança detectada".to_string(),
+                        };
+
+                        patterns.push(pattern);
+                        break;
                     }
                 }
             }
-        }
+        });
 
         Ok(patterns)
     }
 }
-

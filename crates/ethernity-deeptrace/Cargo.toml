@@ -15,6 +15,7 @@ ethernity-rpc = { path = "../ethernity-rpc" }
 ethers = { workspace = true }
 ethereum-types = { workspace = true }
 web3 = { workspace = true }
+ethabi = "18.0"
 
 # Async
 tokio = { workspace = true }
@@ -24,15 +25,17 @@ futures = { workspace = true }
 # Serialização
 serde = { workspace = true }
 serde_json = { workspace = true }
+hex = "0.4"
 
 # Utilitários
 bytes = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
-lru = { workspace = true }
+lru = "0.12"
 dashmap = { workspace = true }
 parking_lot = { workspace = true }
+sysinfo = "0.29"
 
 # Logging
 tracing = { workspace = true }

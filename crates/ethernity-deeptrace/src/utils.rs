@@ -1,11 +1,12 @@
 /*!
  * Ethernity DeepTrace - Utils
- * 
+ *
  * Utilitários para análise de traces
  */
 
-use ethernity_core::{Error, Result, types::*};
+use ethernity_core::types::*;
 use std::collections::HashMap;
+use ethereum_types::{Address, H256, U256};
 
 /// Utilitários para análise de bytecode
 pub struct BytecodeAnalyzer;
@@ -14,7 +15,7 @@ impl BytecodeAnalyzer {
     /// Extrai seletores de função do bytecode
     pub fn extract_function_selectors(bytecode: &[u8]) -> Vec<[u8; 4]> {
         let mut selectors = Vec::new();
-        
+
         // Procura por padrões de PUSH4 seguido de EQ (comparação de seletor)
         for i in 0..bytecode.len().saturating_sub(6) {
             if bytecode[i] == 0x63 { // PUSH4
@@ -27,7 +28,7 @@ impl BytecodeAnalyzer {
                 selectors.push(selector);
             }
         }
-        
+
         selectors
     }
 
@@ -39,7 +40,7 @@ impl BytecodeAnalyzer {
     /// Analisa a complexidade do bytecode
     pub fn analyze_complexity(bytecode: &[u8]) -> BytecodeComplexity {
         let mut complexity = BytecodeComplexity::default();
-        
+
         for &byte in bytecode {
             match byte {
                 0x00..=0x0f => complexity.arithmetic_ops += 1,
@@ -56,7 +57,7 @@ impl BytecodeAnalyzer {
                 _ => complexity.other_ops += 1,
             }
         }
-        
+
         complexity.total_ops = bytecode.len();
         complexity
     }
@@ -64,7 +65,7 @@ impl BytecodeAnalyzer {
     /// Detecta padrões de proxy
     pub fn detect_proxy_patterns(bytecode: &[u8]) -> Vec<ProxyPattern> {
         let mut patterns = Vec::new();
-        
+
         // Padrão EIP-1167 (Minimal Proxy)
         let minimal_proxy_pattern = [
             0x36, 0x3d, 0x3d, 0x37, 0x3d, 0x3d, 0x3d, 0x36, 0x3d, 0x73
@@ -72,12 +73,12 @@ impl BytecodeAnalyzer {
         if Self::contains_pattern(bytecode, &minimal_proxy_pattern) {
             patterns.push(ProxyPattern::MinimalProxy);
         }
-        
+
         // Padrão de DELEGATECALL
         if bytecode.contains(&0xf4) { // DELEGATECALL opcode
             patterns.push(ProxyPattern::DelegateCall);
         }
-        
+
         // Padrão de storage slot para implementação
         let implementation_slot_pattern = [
             0x7f, 0x36, 0x08, 0x94, 0xa1, 0x3b, 0xa1, 0xa3, 0x20, 0x6a
@@ -85,7 +86,7 @@ impl BytecodeAnalyzer {
         if Self::contains_pattern(bytecode, &implementation_slot_pattern) {
             patterns.push(ProxyPattern::UpgradeableProxy);
         }
-        
+
         patterns
     }
 }
@@ -111,14 +112,14 @@ pub struct BytecodeComplexity {
 impl BytecodeComplexity {
     /// Calcula um score de complexidade
     pub fn complexity_score(&self) -> f64 {
-        let weighted_score = 
+        let weighted_score =
             self.arithmetic_ops as f64 * 1.0 +
-            self.comparison_ops as f64 * 1.2 +
-            self.crypto_ops as f64 * 2.0 +
-            self.storage_ops as f64 * 1.5 +
-            self.system_ops as f64 * 3.0 +
-            self.other_ops as f64 * 1.0;
-        
+                self.comparison_ops as f64 * 1.2 +
+                self.crypto_ops as f64 * 2.0 +
+                self.storage_ops as f64 * 1.5 +
+                self.system_ops as f64 * 3.0 +
+                self.other_ops as f64 * 1.0;
+
         weighted_score / self.total_ops.max(1) as f64
     }
 }
@@ -139,22 +140,22 @@ impl ValueFlowAnalyzer {
     /// Analisa o fluxo de valor em uma transação
     pub fn analyze_value_flow(transfers: &[crate::TokenTransfer]) -> ValueFlowAnalysis {
         let mut analysis = ValueFlowAnalysis::default();
-        
+
         // Agrupa transferências por endereço
         let mut address_flows: HashMap<Address, AddressFlow> = HashMap::new();
-        
+
         for transfer in transfers {
             // Fluxo de saída
             let from_flow = address_flows.entry(transfer.from).or_default();
             from_flow.outgoing += transfer.amount;
             from_flow.tokens.insert(transfer.token_address);
-            
+
             // Fluxo de entrada
             let to_flow = address_flows.entry(transfer.to).or_default();
             to_flow.incoming += transfer.amount;
             to_flow.tokens.insert(transfer.token_address);
         }
-        
+
         // Calcula estatísticas
         for (address, flow) in address_flows {
             let net_flow = if flow.incoming >= flow.outgoing {
@@ -162,37 +163,41 @@ impl ValueFlowAnalyzer {
             } else {
                 flow.outgoing - flow.incoming
             };
-            
+
             if flow.incoming > flow.outgoing {
                 analysis.net_receivers.push((address, net_flow));
             } else if flow.outgoing > flow.incoming {
                 analysis.net_senders.push((address, net_flow));
             }
-            
+
             analysis.total_addresses += 1;
             analysis.total_volume += flow.incoming + flow.outgoing;
         }
-        
+
         // Ordena por volume
         analysis.net_receivers.sort_by(|a, b| b.1.cmp(&a.1));
         analysis.net_senders.sort_by(|a, b| b.1.cmp(&a.1));
-        
+
         analysis
     }
 
     /// Detecta padrões suspeitos no fluxo de valor
     pub fn detect_suspicious_patterns(analysis: &ValueFlowAnalysis) -> Vec<SuspiciousPattern> {
         let mut patterns = Vec::new();
-        
+
         // Concentração de valor
         if let Some((top_receiver, top_amount)) = analysis.net_receivers.first() {
-            let total_received: U256 = analysis.net_receivers.iter().map(|(_, amount)| *amount).sum();
+            let mut total_received = U256::zero();
+            for (_, amount) in &analysis.net_receivers {
+                total_received += *amount;
+            }
+
             let concentration = if total_received > U256::zero() {
                 top_amount.as_u128() as f64 / total_received.as_u128() as f64
             } else {
                 0.0
             };
-            
+
             if concentration > 0.8 {
                 patterns.push(SuspiciousPattern::HighConcentration {
                     address: *top_receiver,
@@ -200,14 +205,14 @@ impl ValueFlowAnalyzer {
                 });
             }
         }
-        
+
         // Circular flow (possível wash trading)
         for (sender_addr, sender_amount) in &analysis.net_senders {
             for (receiver_addr, receiver_amount) in &analysis.net_receivers {
                 if sender_addr == receiver_addr {
                     continue;
                 }
-                
+
                 let ratio = sender_amount.as_u128() as f64 / receiver_amount.as_u128() as f64;
                 if ratio > 0.9 && ratio < 1.1 {
                     patterns.push(SuspiciousPattern::CircularFlow {
@@ -218,7 +223,7 @@ impl ValueFlowAnalyzer {
                 }
             }
         }
-        
+
         patterns
     }
 }
@@ -265,10 +270,10 @@ impl GasAnalyzer {
     /// Analisa o uso de gas em uma transação
     pub fn analyze_gas_usage(execution_path: &[crate::ExecutionStep]) -> GasAnalysis {
         let mut analysis = GasAnalysis::default();
-        
+
         for step in execution_path {
             analysis.total_gas_used += step.gas_used;
-            
+
             // Categoriza por tipo de operação
             match step.call_type {
                 crate::trace::CallType::Call => analysis.call_gas += step.gas_used,
@@ -276,8 +281,9 @@ impl GasAnalyzer {
                 crate::trace::CallType::DelegateCall => analysis.delegate_call_gas += step.gas_used,
                 crate::trace::CallType::Create => analysis.create_gas += step.gas_used,
                 crate::trace::CallType::Create2 => analysis.create2_gas += step.gas_used,
+                _ => {} // Outros tipos
             }
-            
+
             // Detecta operações caras
             if step.gas_used > U256::from(100000) {
                 analysis.expensive_operations.push(ExpensiveOperation {
@@ -289,7 +295,7 @@ impl GasAnalyzer {
                 });
             }
         }
-        
+
         analysis.operation_count = execution_path.len();
         analysis
     }
@@ -297,34 +303,34 @@ impl GasAnalyzer {
     /// Detecta padrões anômalos de gas
     pub fn detect_gas_anomalies(analysis: &GasAnalysis) -> Vec<GasAnomaly> {
         let mut anomalies = Vec::new();
-        
+
         // Gas usage muito alto
         if analysis.total_gas_used > U256::from(10_000_000) {
             anomalies.push(GasAnomaly::ExcessiveGasUsage {
                 total_gas: analysis.total_gas_used,
             });
         }
-        
+
         // Muitas operações caras
         if analysis.expensive_operations.len() > 10 {
             anomalies.push(GasAnomaly::TooManyExpensiveOperations {
                 count: analysis.expensive_operations.len(),
             });
         }
-        
+
         // Proporção anômala de delegate calls
         let delegate_ratio = if analysis.total_gas_used > U256::zero() {
             analysis.delegate_call_gas.as_u128() as f64 / analysis.total_gas_used.as_u128() as f64
         } else {
             0.0
         };
-        
+
         if delegate_ratio > 0.5 {
             anomalies.push(GasAnomaly::HighDelegateCallRatio {
                 ratio: delegate_ratio,
             });
         }
-        
+
         anomalies
     }
 }
@@ -386,7 +392,7 @@ impl DisplayUtils {
     /// Formata gas para exibição
     pub fn format_gas(gas: &U256) -> String {
         let gas_value = gas.as_u128();
-        
+
         if gas_value >= 1_000_000 {
             format!("{:.2}M", gas_value as f64 / 1_000_000.0)
         } else if gas_value >= 1_000 {
@@ -399,8 +405,12 @@ impl DisplayUtils {
     /// Cria um resumo textual da análise
     pub fn create_analysis_summary(analysis: &crate::TransactionAnalysis) -> String {
         let mut summary = String::new();
-        
-        summary.push_str(&format!("Transação: {}\n", Self::format_address(&Address::from_slice(analysis.tx_hash.as_bytes()))));
+
+        // Converte H256 para Address para formatação
+        let tx_hash_bytes: [u8; 32] = analysis.tx_hash.into();
+        let tx_hash_addr = Address::from_slice(&tx_hash_bytes[12..32]);
+
+        summary.push_str(&format!("Transação: {}\n", Self::format_address(&tx_hash_addr)));
         summary.push_str(&format!("Bloco: {}\n", analysis.block_number));
         summary.push_str(&format!("Status: {}\n", if analysis.status { "Sucesso" } else { "Falha" }));
         summary.push_str(&format!("Gas usado: {}\n", Self::format_gas(&analysis.gas_used)));
@@ -408,14 +418,14 @@ impl DisplayUtils {
         summary.push_str(&format!("Contratos criados: {}\n", analysis.contract_creations.len()));
         summary.push_str(&format!("Padrões detectados: {}\n", analysis.detected_patterns.len()));
         summary.push_str(&format!("Profundidade máxima: {}\n", analysis.call_tree.max_depth()));
-        
+
         if !analysis.detected_patterns.is_empty() {
             summary.push_str("\nPadrões detectados:\n");
             for pattern in &analysis.detected_patterns {
                 summary.push_str(&format!("- {} (confiança: {:.2})\n", pattern.description, pattern.confidence));
             }
         }
-        
+
         summary
     }
 }
@@ -428,22 +438,21 @@ impl CacheUtils {
     pub fn calculate_analysis_hash(tx_hash: &H256, config: &crate::TraceAnalysisConfig) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         tx_hash.hash(&mut hasher);
         config.max_depth.hash(&mut hasher);
         config.memory_limit.hash(&mut hasher);
         config.enable_cache.hash(&mut hasher);
-        
+
         format!("{:x}", hasher.finish())
     }
 
     /// Verifica se uma análise deve ser cacheada
     pub fn should_cache_analysis(analysis: &crate::TransactionAnalysis) -> bool {
         // Cacheia análises complexas ou com muitos padrões detectados
-        analysis.call_tree.total_calls() > 10 || 
-        analysis.detected_patterns.len() > 0 ||
-        analysis.token_transfers.len() > 5
+        analysis.call_tree.total_calls() > 10 ||
+            analysis.detected_patterns.len() > 0 ||
+            analysis.token_transfers.len() > 5
     }
 }
-

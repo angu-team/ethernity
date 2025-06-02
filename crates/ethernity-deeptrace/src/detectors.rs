@@ -1,14 +1,13 @@
 /*!
  * Ethernity DeepTrace - Detectors
- * 
+ *
  * Detectores especializados para diferentes tipos de eventos
  */
 
-use ethernity_core::{Error, types::*};
+use ethernity_core::types::*;
 use crate::{analyzer::TraceAnalysisResult, DetectedPattern, PatternType};
 use async_trait::async_trait;
-use ethers::utils::hex;
-use web3::types::{Address, U256};
+use ethereum_types::{Address, U256};
 
 /// Trait base para detectores especializados
 #[async_trait]
@@ -140,35 +139,39 @@ impl SpecializedDetector for FrontrunningDetector {
         // 2. Gas price mais alto na primeira transação
         // 3. Mesmo contrato/função sendo chamado
 
+        // Coleta todos os nós da árvore de chamadas
+        let mut call_nodes = Vec::new();
+        analysis.call_tree.traverse_preorder(|node| {
+            call_nodes.push(node);
+        });
+
         // Analisa chamadas similares
-        for window in analysis.call_tree.nodes.windows(2) {
+        for window in call_nodes.windows(2) {
             if let [call1, call2] = window {
                 // Verifica se são chamadas para o mesmo contrato
-                if call1.call.to == call2.call.to && call1.call.to.is_empty() == false {
+                if call1.to == call2.to && call1.to.is_some() {
                     // Verifica se têm inputs similares (mesma função)
-                    if let (Some(input1), Some(input2)) = (&call1.call.input, &call2.call.input) {
-                        if input1.len() >= 4 && input2.len() >= 4 {
-                            // Compara os primeiros 4 bytes (seletor de função)
-                            if input1[0..4] == input2[0..4] {
-                                // Verifica se são de endereços diferentes
-                                if call1.call.from != call2.call.from {
-                                    let mut data = serde_json::Map::new();
-                                    data.insert("contract".to_string(), serde_json::Value::String(format!("{:?}", call1.call.to)));
-                                    data.insert("frontrunner".to_string(), serde_json::Value::String(format!("{:?}", call1.call.from)));
-                                    data.insert("victim".to_string(), serde_json::Value::String(format!("{:?}", call2.call.from)));
-                                    data.insert("function".to_string(), serde_json::Value::String(hex::encode(&input1[0..4])));
+                    if call1.input.len() >= 4 && call2.input.len() >= 4 {
+                        // Compara os primeiros 4 bytes (seletor de função)
+                        if call1.input[0..4] == call2.input[0..4] {
+                            // Verifica se são de endereços diferentes
+                            if call1.from != call2.from {
+                                let mut data = serde_json::Map::new();
+                                data.insert("contract".to_string(), serde_json::Value::String(format!("{:?}", call1.to)));
+                                data.insert("frontrunner".to_string(), serde_json::Value::String(format!("{:?}", call1.from)));
+                                data.insert("victim".to_string(), serde_json::Value::String(format!("{:?}", call2.from)));
+                                data.insert("function".to_string(), serde_json::Value::String(hex::encode(&call1.input[0..4])));
 
-                                    let event = DetectedEvent {
-                                        event_type: "frontrunning".to_string(),
-                                        confidence: 0.75,
-                                        addresses: vec![call1.call.to, call1.call.from, call2.call.from],
-                                        data: serde_json::Value::Object(data),
-                                        description: "Possível frontrunning detectado".to_string(),
-                                        severity: EventSeverity::Medium,
-                                    };
+                                let event = DetectedEvent {
+                                    event_type: "frontrunning".to_string(),
+                                    confidence: 0.75,
+                                    addresses: vec![call1.to.unwrap_or_else(|| Address::zero()), call1.from, call2.from],
+                                    data: serde_json::Value::Object(data),
+                                    description: "Possível frontrunning detectado".to_string(),
+                                    severity: EventSeverity::Medium,
+                                };
 
-                                    events.push(event);
-                                }
+                                events.push(event);
                             }
                         }
                     }
@@ -204,10 +207,10 @@ impl SpecializedDetector for ReentrancyDetector {
         // 3. Padrão de call -> external call -> call
 
         let mut call_stack = std::collections::HashMap::new();
-        
-        for node in &analysis.call_tree.nodes {
-            if let Some(to) = node.call.to {
-                let key = (to, &node.call.from);
+
+        analysis.call_tree.traverse_preorder(|node| {
+            if let Some(to) = node.to {
+                let key = (to, node.from);
                 let count = call_stack.entry(key).or_insert(0);
                 *count += 1;
 
@@ -215,24 +218,25 @@ impl SpecializedDetector for ReentrancyDetector {
                 if *count > 1 {
                     // Verifica se há chamadas aninhadas (reentrancy)
                     let mut has_nested_calls = false;
-                    for other_node in &analysis.call_tree.nodes {
-                        if other_node.depth > node.depth && 
-                           other_node.call.to == node.call.from {
+
+                    // Percorre todos os nós para verificar se há chamadas aninhadas
+                    analysis.call_tree.traverse_preorder(|other_node| {
+                        if other_node.depth > node.depth &&
+                            other_node.to == Some(node.from) {
                             has_nested_calls = true;
-                            break;
                         }
-                    }
+                    });
 
                     if has_nested_calls {
                         let mut data = serde_json::Map::new();
                         data.insert("contract".to_string(), serde_json::Value::String(format!("{:?}", to)));
-                        data.insert("caller".to_string(), serde_json::Value::String(format!("{:?}", node.call.from)));
+                        data.insert("caller".to_string(), serde_json::Value::String(format!("{:?}", node.from)));
                         data.insert("call_count".to_string(), serde_json::Value::Number(serde_json::Number::from(*count)));
 
                         let event = DetectedEvent {
                             event_type: "reentrancy".to_string(),
                             confidence: 0.8,
-                            addresses: vec![to, node.call.from.parse().unwrap()],
+                            addresses: vec![to, node.from],
                             data: serde_json::Value::Object(data),
                             description: "Possível reentrancy attack detectado".to_string(),
                             severity: EventSeverity::Critical,
@@ -242,7 +246,7 @@ impl SpecializedDetector for ReentrancyDetector {
                     }
                 }
             }
-        }
+        });
 
         Ok(events)
     }
@@ -279,8 +283,8 @@ impl SpecializedDetector for PriceManipulationDetector {
                 let mut related_transfers = Vec::new();
                 for other_transfer in &analysis.token_transfers {
                     if other_transfer.token_address == transfer.token_address &&
-                       other_transfer != transfer &&
-                       (other_transfer.from == transfer.to || other_transfer.to == transfer.from) {
+                        other_transfer != transfer &&
+                        (other_transfer.from == transfer.to || other_transfer.to == transfer.from) {
                         related_transfers.push(other_transfer);
                     }
                 }
@@ -338,8 +342,8 @@ impl SpecializedDetector for SuspiciousLiquidationDetector {
             if let [transfer1, transfer2, transfer3] = window {
                 // Verifica se há um padrão de: manipulação -> liquidação -> lucro
                 if transfer1.amount > U256::from(100000) && // Grande transferência inicial
-                   transfer2.from != transfer1.from && // Liquidação de outro usuário
-                   transfer3.to == transfer1.from { // Lucro volta para o manipulador
+                    transfer2.from != transfer1.from && // Liquidação de outro usuário
+                    transfer3.to == transfer1.from { // Lucro volta para o manipulador
 
                     let mut data = serde_json::Map::new();
                     data.insert("liquidator".to_string(), serde_json::Value::String(format!("{:?}", transfer1.from)));
@@ -374,7 +378,7 @@ impl DetectorManager {
     /// Cria um novo gerenciador com detectores padrão
     pub fn new() -> Self {
         let mut detectors: Vec<Box<dyn SpecializedDetector>> = Vec::new();
-        
+
         detectors.push(Box::new(SandwichAttackDetector::new()));
         detectors.push(Box::new(FrontrunningDetector::new()));
         detectors.push(Box::new(ReentrancyDetector::new()));
@@ -418,4 +422,3 @@ impl Default for DetectorManager {
         Self::new()
     }
 }
-

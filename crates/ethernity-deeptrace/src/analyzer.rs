@@ -1,15 +1,13 @@
 /*!
  * Ethernity DeepTrace - Analyzer
- * 
+ *
  * Analisador principal de traces de transações
  */
 
-use ethernity_core::{Error, types::*};
-use crate::{trace::*, TraceAnalysisConfig, TokenTransfer, ContractCreation, ExecutionStep, TokenType, ContractType};
-use std::sync::Arc;
-use std::collections::HashMap;
-use web3::types::{Address, H256, U256};
 use crate::memory::memory::MemoryManager;
+use crate::{trace::*, ContractCreation, ContractType, ExecutionStep, TokenTransfer, TokenType, TraceAnalysisConfig};
+use ethereum_types::{Address, H256, U256};
+use std::sync::Arc;
 
 /// Contexto de análise
 pub struct AnalysisContext {
@@ -36,7 +34,7 @@ impl TraceAnalyzer {
     pub async fn analyze(
         &self,
         trace: &CallTrace,
-        receipt: &web3::types::TransactionReceipt,
+        receipt: &serde_json::Value,
     ) -> Result<TraceAnalysisResult, ()> {
         // Constrói a árvore de chamadas
         let call_tree = self.build_call_tree(trace)?;
@@ -64,8 +62,22 @@ impl TraceAnalyzer {
         self.build_call_tree_recursive(trace, 0, &mut nodes)?;
 
         Ok(CallTree {
-            root: trace.clone(),
-            nodes,
+            root: CallNode {
+                index: 0,
+                depth: 0,
+                call_type: trace.call_type.as_deref().map(CallType::from).unwrap_or(CallType::Call),
+                from: Address::from_slice(&hex::decode(trace.from.trim_start_matches("0x")).unwrap_or_default()),
+                to: if trace.to.is_empty() { None } else {
+                    Some(Address::from_slice(&hex::decode(trace.to.trim_start_matches("0x")).unwrap_or_default()))
+                },
+                value: U256::from_dec_str(&trace.value).unwrap_or(U256::zero()),
+                gas: U256::from_dec_str(&trace.gas).unwrap_or(U256::zero()),
+                gas_used: U256::from_dec_str(&trace.gas_used).unwrap_or(U256::zero()),
+                input: hex::decode(trace.input.trim_start_matches("0x")).unwrap_or_default(),
+                output: hex::decode(trace.output.trim_start_matches("0x")).unwrap_or_default(),
+                error: trace.error.clone(),
+                children: Vec::new(),
+            },
         })
     }
 
@@ -95,7 +107,7 @@ impl TraceAnalyzer {
         if let Some(calls) = &trace.calls {
             for child_call in calls {
                 self.build_call_tree_recursive(child_call, depth + 1, nodes)?;
-                
+
                 // Adiciona o índice do filho ao nó pai
                 if let Some(parent_node) = nodes.get_mut(node_index) {
                     parent_node.children.push(nodes.len() - 1);
@@ -109,15 +121,17 @@ impl TraceAnalyzer {
     /// Extrai transferências de tokens dos logs
     async fn extract_token_transfers(
         &self,
-        trace: &CallTrace,
-        receipt: &web3::types::TransactionReceipt,
+        _trace: &CallTrace,
+        receipt: &serde_json::Value,
     ) -> Result<Vec<TokenTransfer>, ()> {
         let mut transfers = Vec::new();
 
         // Processa logs do recibo
-        for (log_index, log) in receipt.logs.iter().enumerate() {
-            if let Some(transfer) = self.parse_token_transfer_log(log, log_index).await? {
-                transfers.push(transfer);
+        if let Some(logs) = receipt.get("logs").and_then(|l| l.as_array()) {
+            for (log_index, log) in logs.iter().enumerate() {
+                if let Some(transfer) = self.parse_token_transfer_log(log, log_index).await? {
+                    transfers.push(transfer);
+                }
             }
         }
 
@@ -127,43 +141,57 @@ impl TraceAnalyzer {
     /// Analisa um log para detectar transferência de token
     async fn parse_token_transfer_log(
         &self,
-        log: &web3::types::Log,
+        log: &serde_json::Value,
         call_index: usize,
     ) -> Result<Option<TokenTransfer>, ()> {
         // Verifica se é um evento Transfer ERC20/ERC721
-        if log.topics.len() >= 3 {
-            let transfer_signature = web3::types::H256::from_slice(&[
-                0xdd, 0xf2, 0x52, 0xad, 0x1b, 0xe2, 0xc8, 0x9b, 0x69, 0xc2, 0xb0, 0x68, 0xfc, 0x37, 0x8d, 0xaa,
-                0x95, 0x2b, 0xa7, 0xf1, 0x63, 0xc4, 0xa1, 0x16, 0x28, 0xf5, 0x5a, 0x4d, 0xf5, 0x23, 0xb3, 0xef,
-            ]);
+        if let Some(topics) = log.get("topics").and_then(|t| t.as_array()) {
+            if topics.len() >= 3 {
+                let transfer_signature = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
 
-            if log.topics[0] == transfer_signature {
-                // Extrai endereços from e to
-                let from = Address::from_slice(&log.topics[1].as_bytes()[12..]);
-                let to = Address::from_slice(&log.topics[2].as_bytes()[12..]);
+                if let Some(topic0) = topics[0].as_str() {
+                    if topic0 == transfer_signature {
+                        // Extrai endereços from e to
+                        let from = Address::from_slice(&hex::decode(
+                            topics[1].as_str().unwrap_or("").trim_start_matches("0x")
+                        ).unwrap_or_default());
 
-                // Determina o tipo de token e valor
-                let (token_type, amount, token_id) = if log.topics.len() == 4 {
-                    // ERC721 - token_id no terceiro tópico
-                    let token_id = U256::from_big_endian(log.topics[3].as_bytes());
-                    (TokenType::Erc721, U256::one(), Some(token_id))
-                } else if !log.data.0.is_empty() {
-                    // ERC20 - valor nos dados
-                    let amount = U256::from_big_endian(&log.data.0);
-                    (TokenType::Erc20, amount, None)
-                } else {
-                    return Ok(None);
-                };
+                        let to = Address::from_slice(&hex::decode(
+                            topics[2].as_str().unwrap_or("").trim_start_matches("0x")
+                        ).unwrap_or_default());
 
-                return Ok(Some(TokenTransfer {
-                    token_type,
-                    token_address: Address::from_slice(log.address.as_bytes()),
-                    from,
-                    to,
-                    amount,
-                    token_id,
-                    call_index,
-                }));
+                        // Determina o tipo de token e valor
+                        let (token_type, amount, token_id) = if topics.len() == 4 {
+                            // ERC721 - token_id no terceiro tópico
+                            let token_id = U256::from_str_radix(
+                                topics[3].as_str().unwrap_or("0").trim_start_matches("0x"), 16
+                            ).unwrap_or(U256::zero());
+                            (TokenType::Erc721, U256::one(), Some(token_id))
+                        } else if let Some(data) = log.get("data").and_then(|d| d.as_str()) {
+                            // ERC20 - valor nos dados
+                            let amount = U256::from_str_radix(
+                                data.trim_start_matches("0x"), 16
+                            ).unwrap_or(U256::zero());
+                            (TokenType::Erc20, amount, None)
+                        } else {
+                            return Ok(None);
+                        };
+
+                        let token_address = Address::from_slice(&hex::decode(
+                            log.get("address").and_then(|a| a.as_str()).unwrap_or("").trim_start_matches("0x")
+                        ).unwrap_or_default());
+
+                        return Ok(Some(TokenTransfer {
+                            token_type,
+                            token_address,
+                            from,
+                            to,
+                            amount,
+                            token_id,
+                            call_index,
+                        }));
+                    }
+                }
             }
         }
 
@@ -185,15 +213,25 @@ impl TraceAnalyzer {
         creations: &mut Vec<ContractCreation>,
     ) -> Result<(), ()> {
         // Verifica se é uma criação de contrato
-        if trace.call_type == CallType::Create || trace.call_type == CallType::Create2 {
-            if let Some(output) = &trace.output {
+        let call_type = trace.call_type.as_deref().map(CallType::from).unwrap_or(CallType::Call);
+
+        if call_type == CallType::Create || call_type == CallType::Create2 {
+            if !trace.output.is_empty() {
                 // Determina o tipo de contrato analisando o bytecode
-                let contract_type = self.determine_contract_type(&output).await?;
+                let output_bytes = hex::decode(trace.output.trim_start_matches("0x")).unwrap_or_default();
+                let contract_type = self.determine_contract_type(&output_bytes).await?;
+
+                let from = Address::from_slice(&hex::decode(trace.from.trim_start_matches("0x")).unwrap_or_default());
+                let contract_address = if trace.to.is_empty() {
+                    Address::zero()
+                } else {
+                    Address::from_slice(&hex::decode(trace.to.trim_start_matches("0x")).unwrap_or_default())
+                };
 
                 let creation = ContractCreation {
-                    creator: trace.from,
-                    contract_address: trace.to.unwrap_or_else(|| Address::zero()),
-                    init_code: trace.input.clone().unwrap_or_default(),
+                    creator: from,
+                    contract_address,
+                    init_code: hex::decode(trace.input.trim_start_matches("0x")).unwrap_or_default(),
                     contract_type,
                     call_index,
                 };
@@ -213,7 +251,7 @@ impl TraceAnalyzer {
     }
 
     /// Determina o tipo de contrato baseado no bytecode
-    async fn determine_contract_type(&self, bytecode: &[u8]) -> Result<ContractType> {
+    async fn determine_contract_type(&self, bytecode: &[u8]) -> Result<ContractType, ()> {
         // Assinaturas de função conhecidas
         let erc20_signatures = [
             &[0x70, 0xa0, 0x82, 0x31], // balanceOf(address)
@@ -272,7 +310,7 @@ impl TraceAnalyzer {
     }
 
     /// Constrói o caminho de execução
-    fn build_execution_path(&self, trace: &CallTrace) -> Result<Vec<ExecutionStep>> {
+    fn build_execution_path(&self, trace: &CallTrace) -> Result<Vec<ExecutionStep>, ()> {
         let mut path = Vec::new();
         self.build_execution_path_recursive(trace, 0, &mut path)?;
         Ok(path)
@@ -284,7 +322,7 @@ impl TraceAnalyzer {
         trace: &CallTrace,
         depth: usize,
         path: &mut Vec<ExecutionStep>,
-    ) -> Result<()> {
+    ) -> Result<(), ()> {
         // Verifica limite de profundidade
         if depth > self.context.config.max_depth {
             return Ok(());
@@ -293,13 +331,17 @@ impl TraceAnalyzer {
         // Adiciona o passo atual
         let step = ExecutionStep {
             depth,
-            call_type: trace.call_type,
-            from: trace.from,
-            to: trace.to.unwrap_or_else(|| Address::zero()),
-            value: trace.value.unwrap_or_else(|| U256::zero()),
-            input: trace.input.clone().unwrap_or_default(),
-            output: trace.output.clone().unwrap_or_default(),
-            gas_used: trace.gas_used.unwrap_or_else(|| U256::zero()),
+            call_type: trace.call_type.as_deref().map(CallType::from).unwrap_or(CallType::Call),
+            from: Address::from_slice(&hex::decode(trace.from.trim_start_matches("0x")).unwrap_or_default()),
+            to: if trace.to.is_empty() {
+                Address::zero()
+            } else {
+                Address::from_slice(&hex::decode(trace.to.trim_start_matches("0x")).unwrap_or_default())
+            },
+            value: U256::from_dec_str(&trace.value).unwrap_or(U256::zero()),
+            input: hex::decode(trace.input.trim_start_matches("0x")).unwrap_or_default(),
+            output: hex::decode(trace.output.trim_start_matches("0x")).unwrap_or_default(),
+            gas_used: U256::from_dec_str(&trace.gas_used).unwrap_or(U256::zero()),
             error: trace.error.clone(),
         };
 
@@ -324,12 +366,6 @@ pub struct TraceAnalysisResult {
     pub execution_path: Vec<ExecutionStep>,
 }
 
-/// Árvore de chamadas
-pub struct CallTree {
-    pub root: CallTrace,
-    pub nodes: Vec<CallTreeNode>,
-}
-
 /// Nó da árvore de chamadas
 pub struct CallTreeNode {
     pub call: CallTrace,
@@ -339,35 +375,67 @@ pub struct CallTreeNode {
 
 impl CallTree {
     /// Obtém todos os nós em uma profundidade específica
-    pub fn nodes_at_depth(&self, depth: usize) -> Vec<&CallTreeNode> {
-        self.nodes.iter().filter(|node| node.depth == depth).collect()
+    pub fn nodes_at_depth(&self, depth: usize) -> Vec<&CallNode> {
+        let mut nodes = Vec::new();
+        self.collect_nodes_at_depth(&self.root, depth, &mut nodes);
+        nodes
     }
 
-    /// Obtém o número total de chamadas
-    pub fn total_calls(&self) -> usize {
-        self.nodes.len()
-    }
-
-    /// Obtém a profundidade máxima
-    pub fn max_depth(&self) -> usize {
-        self.nodes.iter().map(|node| node.depth).max().unwrap_or(0)
+    fn collect_nodes_at_depth<'a>(&self, node: &'a CallNode, target_depth: usize, nodes: &mut Vec<&'a CallNode>) {
+        if node.depth == target_depth {
+            nodes.push(node);
+        }
+        for child in &node.children {
+            self.collect_nodes_at_depth(child, target_depth, nodes);
+        }
     }
 
     /// Obtém todas as chamadas que falharam
-    pub fn failed_calls(&self) -> Vec<&CallTreeNode> {
-        self.nodes.iter().filter(|node| node.call.error.is_some()).collect()
+    pub fn failed_calls(&self) -> Vec<&CallNode> {
+        let mut failed = Vec::new();
+        self.collect_failed_calls(&self.root, &mut failed);
+        failed
+    }
+
+    fn collect_failed_calls<'a>(&self, node: &'a CallNode, failed: &mut Vec<&'a CallNode>) {
+        if node.error.is_some() {
+            failed.push(node);
+        }
+        for child in &node.children {
+            self.collect_failed_calls(child, failed);
+        }
     }
 
     /// Obtém todas as chamadas para um endereço específico
-    pub fn calls_to_address(&self, address: &Address) -> Vec<&CallTreeNode> {
-        self.nodes.iter().filter(|node| {
-            node.call.to.map_or(false, |to| to == *address)
-        }).collect()
+    pub fn calls_to_address(&self, address: &Address) -> Vec<&CallNode> {
+        let mut calls = Vec::new();
+        self.collect_calls_to_address(&self.root, address, &mut calls);
+        calls
+    }
+
+    fn collect_calls_to_address<'a>(&self, node: &'a CallNode, address: &Address, calls: &mut Vec<&'a CallNode>) {
+        if node.to.map_or(false, |to| to == *address) {
+            calls.push(node);
+        }
+        for child in &node.children {
+            self.collect_calls_to_address(child, address, calls);
+        }
     }
 
     /// Obtém todas as chamadas de um endereço específico
-    pub fn calls_from_address(&self, address: &Address) -> Vec<&CallTreeNode> {
-        self.nodes.iter().filter(|node| node.call.from == *address).collect()
+    pub fn calls_from_address(&self, address: &Address) -> Vec<&CallNode> {
+        let mut calls = Vec::new();
+        self.collect_calls_from_address(&self.root, address, &mut calls);
+        calls
+    }
+
+    fn collect_calls_from_address<'a>(&self, node: &'a CallNode, address: &Address, calls: &mut Vec<&'a CallNode>) {
+        if node.from == *address {
+            calls.push(node);
+        }
+        for child in &node.children {
+            self.collect_calls_from_address(child, address, calls);
+        }
     }
 }
 
@@ -395,12 +463,12 @@ impl TraceAnalysisResult {
 
         // Calcula endereços únicos
         let mut unique_addresses = std::collections::HashSet::new();
-        for node in &self.call_tree.nodes {
-            unique_addresses.insert(node.call.from);
-            if let Some(to) = node.call.to {
+        self.call_tree.traverse_preorder(|node| {
+            unique_addresses.insert(node.from);
+            if let Some(to) = node.to {
                 unique_addresses.insert(to);
             }
-        }
+        });
 
         // Calcula gas total usado
         let total_gas_used = self.execution_path.iter()
@@ -419,4 +487,3 @@ impl TraceAnalysisResult {
         }
     }
 }
-
