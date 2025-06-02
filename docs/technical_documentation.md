@@ -14,7 +14,6 @@ ethernity/
 ├── crates/
 │   ├── ethernity-core/        # Tipos e utilitários compartilhados
 │   ├── ethernity-deeptrace/   # Análise profunda de transações
-│   ├── ethernity-events/      # Sistema de eventos com Kafka
 │   ├── ethernity-rpc/         # Cliente RPC otimizado
 │   └── ethernity-sdk/         # SDKs para consumidores
 └── tests/                     # Testes de integração e performance
@@ -37,15 +36,6 @@ Responsável pela análise profunda de transações EVM, incluindo:
 - Detecção de padrões em transações
 - Análise de fluxo de fundos
 - Gerenciamento otimizado de memória para processamento de grandes volumes de dados
-
-### ethernity-events
-
-Sistema de eventos com integração Kafka, implementando:
-
-- Arquitetura hexagonal com adaptadores para diferentes fontes/destinos
-- Integração completa com Kafka para mensageria
-- Subscrição a eventos específicos (incluindo transações pendentes)
-- Notificações em tempo real via WebSocket, Webhook e outros canais
 
 ### ethernity-rpc
 

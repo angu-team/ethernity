@@ -6,7 +6,6 @@
 - [x] Adicionar tiny-keccak, rlp, secp256k1 ao Cargo.toml
 - [x] Corrigir erros de compilação no ethernity-core
 - [x] Corrigir resolver do workspace
-- [ ] Verificar e corrigir módulos faltantes no ethernity-events
 - [ ] Verificar outros crates (ethernity-deeptrace, ethernity-rpc, ethernity-sdk)
 - [ ] Corrigir erros de compilação restantes
 
