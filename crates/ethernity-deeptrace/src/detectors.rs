@@ -4,8 +4,7 @@
  * Detectores especializados para diferentes tipos de eventos
  */
 
-use ethernity_core::types::*;
-use crate::{analyzer::TraceAnalysisResult, DetectedPattern, PatternType};
+use crate::analyzer::TraceAnalysisResult;
 use async_trait::async_trait;
 use ethereum_types::{Address, U256};
 

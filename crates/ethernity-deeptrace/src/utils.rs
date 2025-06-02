@@ -4,9 +4,8 @@
  * Utilitários para análise de traces
  */
 
-use ethernity_core::types::*;
-use std::collections::HashMap;
 use ethereum_types::{Address, H256, U256};
+use std::collections::HashMap;
 
 /// Utilitários para análise de bytecode
 pub struct BytecodeAnalyzer;

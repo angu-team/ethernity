@@ -1,9 +1,8 @@
-use ethernity_core::types::*;
+use parking_lot::RwLock;
+use std::collections::HashMap;
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::collections::HashMap;
-use parking_lot::RwLock;
-use std::num::NonZeroUsize;
 
 /// Módulo para gerenciamento de memória e performance
 pub mod memory {

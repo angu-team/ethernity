@@ -13,16 +13,15 @@ mod patterns;
 mod detectors;
 mod utils;
 
-use ethernity_core::types::*;
-use std::sync::Arc;
 use ethereum_types::{Address, H256, U256};
+use std::sync::Arc;
 
+pub use analyzer::*;
+pub use detectors::*;
 // Re-exportações públicas
 pub use memory::*;
-pub use trace::*;
-pub use analyzer::*;
 pub use patterns::*;
-pub use detectors::*;
+pub use trace::*;
 pub use utils::*;
 
 /// Configuração para análise de traces
@@ -96,7 +95,7 @@ pub struct DeepTraceAnalyzer {
     config: TraceAnalysisConfig,
     rpc_client: Arc<dyn ethernity_core::traits::RpcProvider>,
     memory_manager: Arc<memory::memory::MemoryManager>,
-    pattern_detectors: Vec<Box<dyn patterns::PatternDetector>>,
+    pattern_detectors: Vec<Box<dyn PatternDetector>>,
 }
 
 impl DeepTraceAnalyzer {
@@ -109,38 +108,38 @@ impl DeepTraceAnalyzer {
         let memory_manager = Arc::new(memory::memory::MemoryManager::new());
 
         // Inicializa os detectores de padrões
-        let mut pattern_detectors: Vec<Box<dyn patterns::PatternDetector>> = Vec::new();
+        let mut pattern_detectors: Vec<Box<dyn PatternDetector>> = Vec::new();
 
         if config.pattern_detection.detect_erc20 {
-            pattern_detectors.push(Box::new(patterns::Erc20PatternDetector::new()));
+            pattern_detectors.push(Box::new(Erc20PatternDetector::new()));
         }
 
         if config.pattern_detection.detect_erc721 {
-            pattern_detectors.push(Box::new(patterns::Erc721PatternDetector::new()));
+            pattern_detectors.push(Box::new(Erc721PatternDetector::new()));
         }
 
         if config.pattern_detection.detect_dex {
-            pattern_detectors.push(Box::new(patterns::DexPatternDetector::new()));
+            pattern_detectors.push(Box::new(DexPatternDetector::new()));
         }
 
         if config.pattern_detection.detect_lending {
-            pattern_detectors.push(Box::new(patterns::LendingPatternDetector::new()));
+            pattern_detectors.push(Box::new(LendingPatternDetector::new()));
         }
 
         if config.pattern_detection.detect_flash_loan {
-            pattern_detectors.push(Box::new(patterns::FlashLoanPatternDetector::new()));
+            pattern_detectors.push(Box::new(FlashLoanPatternDetector::new()));
         }
 
         if config.pattern_detection.detect_mev {
-            pattern_detectors.push(Box::new(patterns::MevPatternDetector::new()));
+            pattern_detectors.push(Box::new(MevPatternDetector::new()));
         }
 
         if config.pattern_detection.detect_rug_pull {
-            pattern_detectors.push(Box::new(patterns::RugPullPatternDetector::new()));
+            pattern_detectors.push(Box::new(RugPullPatternDetector::new()));
         }
 
         if config.pattern_detection.detect_governance {
-            pattern_detectors.push(Box::new(patterns::GovernancePatternDetector::new()));
+            pattern_detectors.push(Box::new(GovernancePatternDetector::new()));
         }
 
         Self {
@@ -157,7 +156,7 @@ impl DeepTraceAnalyzer {
         let trace_bytes = self.rpc_client.get_transaction_trace(tx_hash).await.map_err(|_| ())?;
 
         // Deserializa o trace
-        let trace: trace::CallTrace = serde_json::from_slice(&trace_bytes)
+        let trace: CallTrace = serde_json::from_slice(&trace_bytes)
             .map_err(|_| ())?;
 
         // Obtém o recibo da transação
@@ -176,7 +175,7 @@ impl DeepTraceAnalyzer {
         let timestamp = chrono::Utc::now(); // Simplificado
 
         // Cria o contexto de análise
-        let context = analyzer::AnalysisContext {
+        let context = AnalysisContext {
             tx_hash,
             block_number,
             timestamp,
@@ -186,7 +185,7 @@ impl DeepTraceAnalyzer {
         };
 
         // Cria o analisador
-        let trace_analyzer = analyzer::TraceAnalyzer::new(context);
+        let trace_analyzer = TraceAnalyzer::new(context);
 
         // Analisa o trace
         let analysis = trace_analyzer.analyze(&trace, &receipt).await.map_err(|_| ())?;
@@ -249,7 +248,7 @@ impl DeepTraceAnalyzer {
     }
 
     /// Detecta padrões na análise
-    async fn detect_patterns(&self, analysis: &analyzer::TraceAnalysisResult) -> Result<Vec<DetectedPattern>, ()> {
+    async fn detect_patterns(&self, analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>, ()> {
         let mut patterns = Vec::new();
 
         for detector in &self.pattern_detectors {
@@ -310,7 +309,7 @@ pub struct TransactionAnalysis {
     pub value: U256,
     pub gas_used: U256,
     pub status: bool,
-    pub call_tree: trace::CallTree,
+    pub call_tree: CallTree,
     pub token_transfers: Vec<TokenTransfer>,
     pub contract_creations: Vec<ContractCreation>,
     pub detected_patterns: Vec<DetectedPattern>,
@@ -318,7 +317,7 @@ pub struct TransactionAnalysis {
 }
 
 /// Transferência de token
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TokenTransfer {
     pub token_type: TokenType,
     pub token_address: Address,
@@ -392,7 +391,7 @@ pub enum PatternType {
 #[derive(Debug, Clone)]
 pub struct ExecutionStep {
     pub depth: usize,
-    pub call_type: trace::CallType,
+    pub call_type: CallType,
     pub from: Address,
     pub to: Address,
     pub value: U256,

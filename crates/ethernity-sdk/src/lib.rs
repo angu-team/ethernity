@@ -4,9 +4,8 @@
  * SDKs para consumidores de eventos Ethernity
  */
 
-use ethernity_core::{Error, error::Result, types::*};
-use rdkafka::consumer::{Consumer, StreamConsumer};
-use rdkafka::config::ClientConfig;
+use ethernity_core::{error::Result, types::*, Error};
+use rdkafka::consumer::Consumer;
 use rdkafka::Message;
 use std::sync::Arc;
 

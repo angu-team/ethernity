@@ -4,11 +4,10 @@
  * Detectores de padrões em transações blockchain
  */
 
-use ethernity_core::types::*;
 use crate::{analyzer::TraceAnalysisResult, DetectedPattern, PatternType};
 use async_trait::async_trait;
-use std::collections::HashMap;
 use ethereum_types::{Address, U256};
+use std::collections::HashMap;
 
 /// Trait para detectores de padrões
 #[async_trait]

@@ -1,7 +1,6 @@
-use ethernity_core::{Error};
-use ethereum_types::{Address, H256, U256};
-use std::sync::Arc;
 use async_trait::async_trait;
+use ethereum_types::{Address, U256};
+use ethernity_core::Error;
 use std::str::FromStr;
 
 /// Estrutura de trace de chamada
