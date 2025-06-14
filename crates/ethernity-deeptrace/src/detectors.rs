@@ -141,7 +141,7 @@ impl SpecializedDetector for FrontrunningDetector {
         // Coleta todos os nós da árvore de chamadas
         let mut call_nodes = Vec::new();
         analysis.call_tree.traverse_preorder(|node| {
-            call_nodes.push(node);
+            call_nodes.push(node.clone());
         });
 
         // Analisa chamadas similares
