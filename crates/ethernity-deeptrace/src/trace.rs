@@ -251,14 +251,14 @@ impl CallTree {
     }
 
     /// Filtra nós com base em um predicado
-    pub fn filter_nodes<F>(&self, predicate: F) -> Vec<&CallNode>
+    pub fn filter_nodes<F>(&self, mut predicate: F) -> Vec<CallNode>
     where
-        F: Fn(&CallNode) -> bool,
+        F: FnMut(&CallNode) -> bool,
     {
         let mut result = Vec::new();
         self.traverse_preorder(|node| {
             if predicate(node) {
-                result.push(node);
+                result.push(node.clone());
             }
         });
         result

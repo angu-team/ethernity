@@ -43,7 +43,7 @@ impl TraceAnalyzer {
         let token_transfers = self.extract_token_transfers(trace, receipt).await?;
 
         // Extrai criações de contratos
-        let contract_creations = self.extract_contract_creations(trace).await?;
+        let contract_creations = self.extract_contract_creations(trace)?;
 
         // Constrói o caminho de execução
         let execution_path = self.build_execution_path(trace)?;
@@ -106,11 +106,12 @@ impl TraceAnalyzer {
         // Processa chamadas filhas
         if let Some(calls) = &trace.calls {
             for child_call in calls {
+                let child_index = nodes.len();
                 self.build_call_tree_recursive(child_call, depth + 1, nodes)?;
 
                 // Adiciona o índice do filho ao nó pai
                 if let Some(parent_node) = nodes.get_mut(node_index) {
-                    parent_node.children.push(nodes.len() - 1);
+                    parent_node.children.push(child_index);
                 }
             }
         }
@@ -199,14 +200,14 @@ impl TraceAnalyzer {
     }
 
     /// Extrai criações de contratos
-    async fn extract_contract_creations(&self, trace: &CallTrace) -> Result<Vec<ContractCreation>, ()> {
+    fn extract_contract_creations(&self, trace: &CallTrace) -> Result<Vec<ContractCreation>, ()> {
         let mut creations = Vec::new();
-        self.extract_contract_creations_recursive(trace, 0, &mut creations).await?;
+        self.extract_contract_creations_recursive(trace, 0, &mut creations)?;
         Ok(creations)
     }
 
     /// Extrai criações de contratos recursivamente
-    async fn extract_contract_creations_recursive(
+    fn extract_contract_creations_recursive(
         &self,
         trace: &CallTrace,
         call_index: usize,
@@ -219,7 +220,7 @@ impl TraceAnalyzer {
             if !trace.output.is_empty() {
                 // Determina o tipo de contrato analisando o bytecode
                 let output_bytes = hex::decode(trace.output.trim_start_matches("0x")).unwrap_or_default();
-                let contract_type = self.determine_contract_type(&output_bytes).await?;
+                let contract_type = self.determine_contract_type(&output_bytes)?;
 
                 let from = Address::from_slice(&hex::decode(trace.from.trim_start_matches("0x")).unwrap_or_default());
                 let contract_address = if trace.to.is_empty() {
@@ -243,7 +244,7 @@ impl TraceAnalyzer {
         // Processa chamadas filhas
         if let Some(calls) = &trace.calls {
             for (i, child_call) in calls.iter().enumerate() {
-                self.extract_contract_creations_recursive(child_call, call_index + i + 1, creations).await?;
+                self.extract_contract_creations_recursive(child_call, call_index + i + 1, creations)?;
             }
         }
 
@@ -251,7 +252,7 @@ impl TraceAnalyzer {
     }
 
     /// Determina o tipo de contrato baseado no bytecode
-    async fn determine_contract_type(&self, bytecode: &[u8]) -> Result<ContractType, ()> {
+    fn determine_contract_type(&self, bytecode: &[u8]) -> Result<ContractType, ()> {
         // Assinaturas de função conhecidas
         let erc20_signatures = [
             &[0x70, 0xa0, 0x82, 0x31], // balanceOf(address)

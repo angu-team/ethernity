@@ -174,8 +174,8 @@ pub mod memory {
         /// Registra um cache
         pub fn register_cache<K, V>(&self, name: &str, cache: Arc<SmartCache<K, V>>)
         where
-            K: std::hash::Hash + Eq + Clone + 'static,
-            V: Clone + 'static,
+            K: std::hash::Hash + Eq + Clone + Send + Sync + 'static,
+            V: Clone + Send + Sync + 'static,
         {
             self.caches.write().insert(name.to_string(), cache as Arc<dyn std::any::Any + Send + Sync>);
         }
@@ -297,14 +297,15 @@ pub mod memory {
                     };
 
                     // Adiciona ao histórico
-                    let mut history_guard = history.write();
-                    history_guard.push(snapshot);
+                    {
+                        let mut history_guard = history.write();
+                        history_guard.push(snapshot);
 
-                    // Limita o tamanho do histórico
-                    if history_guard.len() > max_history {
-                        history_guard.remove(0);
+                        // Limita o tamanho do histórico
+                        if history_guard.len() > max_history {
+                            history_guard.remove(0);
+                        }
                     }
-
                     // Espera até o próximo intervalo
                     tokio::time::sleep(sampling_interval).await;
                 }
