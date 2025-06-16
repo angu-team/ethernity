@@ -43,7 +43,7 @@ impl TraceAnalyzer {
         let token_transfers = self.extract_token_transfers(trace, receipt).await?;
 
         // Extrai criações de contratos
-        let contract_creations = self.extract_contract_creations(trace)?;
+        let contract_creations = self.extract_contract_creations(trace).await?;
 
         // Constrói o caminho de execução
         let execution_path = self.build_execution_path(trace)?;
@@ -200,14 +200,14 @@ impl TraceAnalyzer {
     }
 
     /// Extrai criações de contratos
-    fn extract_contract_creations(&self, trace: &CallTrace) -> Result<Vec<ContractCreation>, ()> {
+    async fn extract_contract_creations(&self, trace: &CallTrace) -> Result<Vec<ContractCreation>, ()> {
         let mut creations = Vec::new();
-        self.extract_contract_creations_recursive(trace, 0, &mut creations)?;
+        self.extract_contract_creations_recursive(trace, 0, &mut creations).await?;
         Ok(creations)
     }
 
     /// Extrai criações de contratos recursivamente
-    fn extract_contract_creations_recursive(
+    async fn extract_contract_creations_recursive(
         &self,
         trace: &CallTrace,
         call_index: usize,
@@ -218,16 +218,24 @@ impl TraceAnalyzer {
 
         if call_type == CallType::Create || call_type == CallType::Create2 {
             if !trace.output.is_empty() {
-                // Determina o tipo de contrato analisando o bytecode
+                // Extrai o endereço do contrato criado a partir do output
                 let output_bytes = hex::decode(trace.output.trim_start_matches("0x")).unwrap_or_default();
-                let contract_type = self.determine_contract_type(&output_bytes)?;
+                let contract_address = if output_bytes.len() >= 20 {
+                    Address::from_slice(&output_bytes[output_bytes.len() - 20..])
+                } else {
+                    Address::zero()
+                };
+
+                // Obtém o bytecode do contrato criado via RPC para determinar o tipo
+                let bytecode = self
+                    .context
+                    .rpc_client
+                    .get_code(contract_address)
+                    .await
+                    .map_err(|_| ())?;
+                let contract_type = self.determine_contract_type(&bytecode)?;
 
                 let from = Address::from_slice(&hex::decode(trace.from.trim_start_matches("0x")).unwrap_or_default());
-                let contract_address = if trace.to.is_empty() {
-                    Address::zero()
-                } else {
-                    Address::from_slice(&hex::decode(trace.to.trim_start_matches("0x")).unwrap_or_default())
-                };
 
                 let creation = ContractCreation {
                     creator: from,
@@ -244,7 +252,9 @@ impl TraceAnalyzer {
         // Processa chamadas filhas
         if let Some(calls) = &trace.calls {
             for (i, child_call) in calls.iter().enumerate() {
-                self.extract_contract_creations_recursive(child_call, call_index + i + 1, creations)?;
+                self
+                    .extract_contract_creations_recursive(child_call, call_index + i + 1, creations)
+                    .await?;
             }
         }
 
