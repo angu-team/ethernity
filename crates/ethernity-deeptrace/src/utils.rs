@@ -36,6 +36,11 @@ impl BytecodeAnalyzer {
         bytecode.windows(pattern.len()).any(|window| window == pattern)
     }
 
+    /// Conta a ocorrência de um opcode específico
+    pub fn count_opcode(bytecode: &[u8], opcode: u8) -> usize {
+        bytecode.iter().filter(|&&b| b == opcode).count()
+    }
+
     /// Analisa a complexidade do bytecode
     pub fn analyze_complexity(bytecode: &[u8]) -> BytecodeComplexity {
         let mut complexity = BytecodeComplexity::default();

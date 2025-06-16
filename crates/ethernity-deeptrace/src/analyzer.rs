@@ -254,38 +254,34 @@ impl TraceAnalyzer {
     /// Determina o tipo de contrato baseado no bytecode
     fn determine_contract_type(&self, bytecode: &[u8]) -> Result<ContractType, ()> {
         // Assinaturas de função conhecidas
-        let erc20_signatures = [
-            &[0x70, 0xa0, 0x82, 0x31], // balanceOf(address)
-            &[0xa9, 0x05, 0x9c, 0xbb], // transfer(address,uint256)
-            &[0x18, 0x16, 0x0d, 0xdd], // totalSupply()
+        let erc20_signatures: &[[u8; 4]] = &[
+            [0x70, 0xa0, 0x82, 0x31], // balanceOf(address)
+            [0xa9, 0x05, 0x9c, 0xbb], // transfer(address,uint256)
+            [0x18, 0x16, 0x0d, 0xdd], // totalSupply()
         ];
 
-        let erc721_signatures = [
-            &[0x6f, 0xdd, 0x43, 0xe1], // balanceOf(address)
-            &[0x6e, 0xb6, 0x1d, 0x3e], // ownerOf(uint256)
-            &[0x42, 0x84, 0x2e, 0x0e], // safeTransferFrom(address,address,uint256)
+        let erc721_signatures: &[[u8; 4]] = &[
+            [0x6f, 0xdd, 0x43, 0xe1], // balanceOf(address)
+            [0x6e, 0xb6, 0x1d, 0x3e], // ownerOf(uint256)
+            [0x42, 0x84, 0x2e, 0x0e], // safeTransferFrom(address,address,uint256)
         ];
+
+        let selectors = crate::utils::BytecodeAnalyzer::extract_function_selectors(bytecode);
 
         // Verifica assinaturas ERC20
-        let mut erc20_count = 0;
-        for signature in &erc20_signatures {
-            if bytecode.windows(4).any(|window| window == *signature) {
-                erc20_count += 1;
-            }
-        }
-
+        let erc20_count = erc20_signatures
+            .iter()
+            .filter(|sig| selectors.contains(sig))
+            .count();
         if erc20_count >= 2 {
             return Ok(ContractType::Erc20Token);
         }
 
         // Verifica assinaturas ERC721
-        let mut erc721_count = 0;
-        for signature in &erc721_signatures {
-            if bytecode.windows(4).any(|window| window == *signature) {
-                erc721_count += 1;
-            }
-        }
-
+        let erc721_count = erc721_signatures
+            .iter()
+            .filter(|sig| selectors.contains(sig))
+            .count();
         if erc721_count >= 2 {
             return Ok(ContractType::Erc721Token);
         }
@@ -297,13 +293,15 @@ impl TraceAnalyzer {
         ];
 
         for pattern in &proxy_patterns {
-            if bytecode.windows(4).any(|window| window == *pattern) {
+            if crate::utils::BytecodeAnalyzer::contains_pattern(bytecode, pattern) {
                 return Ok(ContractType::Proxy);
             }
         }
 
-        // Verifica padrões de factory
-        if bytecode.windows(4).any(|window| window == &[0xf0, 0x00, 0x00, 0x00]) { // CREATE opcode
+        // Verifica ocorrências de CREATE/CREATE2
+        let create_ops = crate::utils::BytecodeAnalyzer::count_opcode(bytecode, 0xf0)
+            + crate::utils::BytecodeAnalyzer::count_opcode(bytecode, 0xf5);
+        if create_ops > 1 {
             return Ok(ContractType::Factory);
         }
 
