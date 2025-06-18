@@ -186,32 +186,27 @@ impl TraceAnalyzer {
 
     /// Extrai criações de contratos
     async fn extract_contract_creations(&self, trace: &CallTrace) -> Result<Vec<ContractCreation>, ()> {
+        use std::collections::VecDeque;
+
         let mut creations = Vec::new();
-        self.extract_contract_creations_recursive(trace, 0, &mut creations).await?;
-        Ok(creations)
-    }
+        let mut queue = VecDeque::new();
+        queue.push_back((trace, 0usize));
 
-    /// Extrai criações de contratos recursivamente
-    async fn extract_contract_creations_recursive(
-        &self,
-        trace: &CallTrace,
-        call_index: usize,
-        creations: &mut Vec<ContractCreation>,
-    ) -> Result<(), ()> {
-        // Verifica se é uma criação de contrato
-        let call_type = trace.call_type.as_deref().map(CallType::from).unwrap_or(CallType::Call);
+        while let Some((node, index)) = queue.pop_front() {
+            let call_type = node
+                .call_type
+                .as_deref()
+                .map(CallType::from)
+                .unwrap_or(CallType::Call);
 
-        if call_type == CallType::Create || call_type == CallType::Create2 {
-            if !trace.output.is_empty() {
-                // Extrai o endereço do contrato criado a partir do output
-                let output_bytes = crate::utils::decode_hex(&trace.output);
+            if (call_type == CallType::Create || call_type == CallType::Create2) && !node.output.is_empty() {
+                let output_bytes = crate::utils::decode_hex(&node.output);
                 let contract_address = if output_bytes.len() >= 20 {
                     Address::from_slice(&output_bytes[output_bytes.len() - 20..])
                 } else {
                     Address::zero()
                 };
 
-                // Obtém o bytecode do contrato criado via RPC para determinar o tipo
                 let bytecode = self
                     .context
                     .rpc_client
@@ -220,30 +215,25 @@ impl TraceAnalyzer {
                     .map_err(|_| ())?;
                 let contract_type = self.determine_contract_type(&bytecode)?;
 
-                let from = crate::utils::parse_address(&trace.from);
+                let from = crate::utils::parse_address(&node.from);
 
-                let creation = ContractCreation {
+                creations.push(ContractCreation {
                     creator: from,
                     contract_address,
-                    init_code: crate::utils::decode_hex(&trace.input),
+                    init_code: crate::utils::decode_hex(&node.input),
                     contract_type,
-                    call_index,
-                };
+                    call_index: index,
+                });
+            }
 
-                creations.push(creation);
+            if let Some(calls) = &node.calls {
+                for (i, child) in calls.iter().enumerate() {
+                    queue.push_back((child, index + i + 1));
+                }
             }
         }
 
-        // Processa chamadas filhas
-        if let Some(calls) = &trace.calls {
-            for (i, child_call) in calls.iter().enumerate() {
-                self
-                    .extract_contract_creations_recursive(child_call, call_index + i + 1, creations)
-                    .await?;
-            }
-        }
-
-        Ok(())
+        Ok(creations)
     }
 
     /// Determina o tipo de contrato baseado no bytecode
@@ -288,7 +278,7 @@ impl TraceAnalyzer {
         ];
 
         for pattern in &proxy_patterns {
-            if crate::utils::BytecodeAnalyzer::contains_pattern(bytecode, pattern) {
+            if crate::utils::BytecodeAnalyzer::contains_pattern(bytecode, *pattern) {
                 return Ok(ContractType::Proxy);
             }
         }

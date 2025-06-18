@@ -134,29 +134,11 @@ impl DeepTraceAnalyzer {
 
     /// Analisa uma transação pelo hash
     pub async fn analyze_transaction(&self, tx_hash: H256) -> Result<TransactionAnalysis, ()> {
-        // Obtém o trace da transação
-        let trace_bytes = self.rpc_client.get_transaction_trace(tx_hash).await.map_err(|_| ())?;
-
-        // Deserializa o trace
-        let trace: CallTrace = serde_json::from_slice(&trace_bytes)
-            .map_err(|_| ())?;
-
-        // Obtém o recibo da transação
-        let receipt_bytes = self.rpc_client.get_transaction_receipt(tx_hash).await.map_err(|_| ())?;
-
-        // Deserializa o recibo como JSON genérico
-        let receipt: serde_json::Value = serde_json::from_slice(&receipt_bytes)
-            .map_err(|_| ())?;
-
-        // Obtém informações básicas do recibo
-        let block_number = receipt.get("blockNumber")
-            .and_then(|v| v.as_str())
-            .and_then(|s| u64::from_str_radix(s.trim_start_matches("0x"), 16).ok())
-            .unwrap_or(0);
-
+        let trace = self.fetch_trace(tx_hash).await?;
+        let receipt = self.fetch_receipt(tx_hash).await?;
+        let (block_number, from, to, gas_used, status) = Self::parse_receipt_info(&receipt);
         let timestamp = chrono::Utc::now(); // Simplificado
 
-        // Cria o contexto de análise
         let context = AnalysisContext {
             tx_hash,
             block_number,
@@ -166,51 +148,102 @@ impl DeepTraceAnalyzer {
             config: self.config.clone(),
         };
 
-        // Cria o analisador
         let trace_analyzer = TraceAnalyzer::new(context);
-
-        // Analisa o trace
         let analysis = trace_analyzer.analyze(&trace, &receipt).await.map_err(|_| ())?;
+        let patterns = self.detect_patterns(&analysis).await?;
 
-        // Detecta padrões
-        let patterns = self.detect_patterns(&analysis).await.map_err(|_| ())?;
+        Ok(Self::build_transaction_analysis(
+            tx_hash,
+            block_number,
+            timestamp,
+            from,
+            to,
+            gas_used,
+            status,
+            analysis,
+            patterns,
+        ))
+    }
 
-        // Extrai informações básicas do recibo
-        let from = receipt.get("from")
+    async fn fetch_trace(&self, tx_hash: H256) -> Result<CallTrace, ()> {
+        let bytes = self
+            .rpc_client
+            .get_transaction_trace(tx_hash)
+            .await
+            .map_err(|_| ())?;
+        serde_json::from_slice(&bytes).map_err(|_| ())
+    }
+
+    async fn fetch_receipt(&self, tx_hash: H256) -> Result<serde_json::Value, ()> {
+        let bytes = self
+            .rpc_client
+            .get_transaction_receipt(tx_hash)
+            .await
+            .map_err(|_| ())?;
+        serde_json::from_slice(&bytes).map_err(|_| ())
+    }
+
+    fn parse_receipt_info(
+        receipt: &serde_json::Value,
+    ) -> (u64, Address, Option<Address>, U256, bool) {
+        let block_number = receipt
+            .get("blockNumber")
+            .and_then(|v| v.as_str())
+            .and_then(|s| u64::from_str_radix(s.trim_start_matches("0x"), 16).ok())
+            .unwrap_or(0);
+
+        let from = receipt
+            .get("from")
             .and_then(|v| v.as_str())
             .and_then(|s| {
                 let addr_bytes = hex::decode(s.trim_start_matches("0x")).ok()?;
                 if addr_bytes.len() >= 20 {
-                    Some(Address::from_slice(&addr_bytes[addr_bytes.len()-20..]))
+                    Some(Address::from_slice(&addr_bytes[addr_bytes.len() - 20..]))
                 } else {
                     None
                 }
             })
-            .unwrap_or_else(|| Address::zero());
+            .unwrap_or_else(Address::zero);
 
-        let to = receipt.get("to")
+        let to = receipt
+            .get("to")
             .and_then(|v| v.as_str())
             .and_then(|s| {
                 let addr_bytes = hex::decode(s.trim_start_matches("0x")).ok()?;
                 if addr_bytes.len() >= 20 {
-                    Some(Address::from_slice(&addr_bytes[addr_bytes.len()-20..]))
+                    Some(Address::from_slice(&addr_bytes[addr_bytes.len() - 20..]))
                 } else {
                     None
                 }
             });
 
-        let gas_used = receipt.get("gasUsed")
+        let gas_used = receipt
+            .get("gasUsed")
             .and_then(|v| v.as_str())
             .and_then(|s| U256::from_str_radix(s.trim_start_matches("0x"), 16).ok())
-            .unwrap_or_else(|| U256::zero());
+            .unwrap_or_else(U256::zero);
 
-        let status = receipt.get("status")
+        let status = receipt
+            .get("status")
             .and_then(|v| v.as_str())
             .map(|s| s == "0x1")
             .unwrap_or(false);
 
-        // Cria a análise final
-        let transaction_analysis = TransactionAnalysis {
+        (block_number, from, to, gas_used, status)
+    }
+
+    fn build_transaction_analysis(
+        tx_hash: H256,
+        block_number: u64,
+        timestamp: chrono::DateTime<chrono::Utc>,
+        from: Address,
+        to: Option<Address>,
+        gas_used: U256,
+        status: bool,
+        analysis: TraceAnalysisResult,
+        patterns: Vec<DetectedPattern>,
+    ) -> TransactionAnalysis {
+        TransactionAnalysis {
             tx_hash,
             block_number,
             timestamp,
@@ -224,9 +257,7 @@ impl DeepTraceAnalyzer {
             contract_creations: analysis.contract_creations,
             detected_patterns: patterns,
             execution_path: analysis.execution_path,
-        };
-
-        Ok(transaction_analysis)
+        }
     }
 
     /// Detecta padrões na análise
