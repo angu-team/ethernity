@@ -25,7 +25,7 @@ ethernity-deeptrace/
 │   ├── lib.rs           # Interface principal e tipos públicos
 │   ├── analyzer.rs      # Analisador principal de traces
 │   ├── trace.rs         # Estruturas de trace e call tree
-│   ├── patterns.rs      # Detectores de padrões DeFi
+│   ├── patterns/        # Módulos de detectores de padrões DeFi
 │   ├── detectors.rs     # Detectores especializados para ataques
 │   ├── memory.rs        # Gerenciamento de memória e cache
 │   └── utils.rs         # Utilitários para análise
