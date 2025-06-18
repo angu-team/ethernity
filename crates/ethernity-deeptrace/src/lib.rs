@@ -118,7 +118,7 @@ impl DeepTraceAnalyzer {
             (config.pattern_detection.detect_rug_pull, Box::new(RugPullPatternDetector::new())),
             (config.pattern_detection.detect_governance, Box::new(GovernancePatternDetector::new())),
         ];
-
+        
         let pattern_detectors: Vec<Box<dyn PatternDetector>> = detectors_all
             .into_iter()
             .filter_map(|(enabled, detector)| if enabled { Some(detector) } else { None })
