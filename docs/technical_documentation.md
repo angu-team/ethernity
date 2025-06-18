@@ -15,6 +15,7 @@ ethernity/
 │   ├── ethernity-core/        # Tipos e utilitários compartilhados
 │   ├── ethernity-deeptrace/   # Análise profunda de transações
 │   ├── ethernity-rpc/         # Cliente RPC otimizado
+│   ├── ethernity-finder/      # Busca de nodes Ethereum
 │   └── ethernity-sdk/         # SDKs para consumidores
 └── tests/                     # Testes de integração e performance
 ```
@@ -46,6 +47,11 @@ Cliente RPC otimizado para comunicação com nodes Ethereum:
 - Batching de requisições
 - Cache inteligente
 - Retry policies e circuit breakers
+
+### ethernity-finder
+
+Busca de nodes Ethereum utilizando a API do Shodan. Responsável por localizar
+endpoints RPC expostos e validar métodos internos disponíveis.
 
 ### ethernity-sdk
 

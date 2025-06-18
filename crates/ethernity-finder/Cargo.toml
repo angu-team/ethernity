@@ -1,0 +1,15 @@
+[package]
+name = "ethernity-finder"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Localizador de nodes Ethereum via Shodan"
+license.workspace = true
+
+[dependencies]
+ethernity-core = { path = "../ethernity-core" }
+reqwest = { version = "0.11.18", features = ["json"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }

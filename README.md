@@ -38,6 +38,12 @@ O Ethernity é um workspace Rust para interação e análise avançada de transa
 - Retry automático e tratamento de erros
 - Suporte a múltiplos transportes
 
+### 🔎 [ethernity-finder](./crates/ethernity-finder/)
+**Busca de nodes Ethereum**
+- Consulta a API do Shodan
+- Validação de `chainId` e métodos RPC
+- Retorno de nodes compatíveis
+
 ### 🔍 [ethernity-deeptrace](./crates/ethernity-deeptrace/)
 **Análise profunda de transações**
 - Análise de call traces e execution paths
@@ -58,6 +64,7 @@ O Ethernity é um workspace Rust para interação e análise avançada de transa
 
 ```mermaid
 graph TD
+    S[ethernity-finder] --> B[ethernity-rpc]
     A[Ethereum Node] --> B[ethernity-rpc]
     B --> C[ethernity-deeptrace]
     C --> D[Pattern Detection]
