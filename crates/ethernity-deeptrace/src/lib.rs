@@ -108,39 +108,21 @@ impl DeepTraceAnalyzer {
         let memory_manager = Arc::new(memory::memory::MemoryManager::new());
 
         // Inicializa os detectores de padrões
-        let mut pattern_detectors: Vec<Box<dyn PatternDetector>> = Vec::new();
+        let detectors_all: Vec<(bool, Box<dyn PatternDetector>)> = vec![
+            (config.pattern_detection.detect_erc20, Box::new(Erc20PatternDetector::new())),
+            (config.pattern_detection.detect_erc721, Box::new(Erc721PatternDetector::new())),
+            (config.pattern_detection.detect_dex, Box::new(DexPatternDetector::new())),
+            (config.pattern_detection.detect_lending, Box::new(LendingPatternDetector::new())),
+            (config.pattern_detection.detect_flash_loan, Box::new(FlashLoanPatternDetector::new())),
+            (config.pattern_detection.detect_mev, Box::new(MevPatternDetector::new())),
+            (config.pattern_detection.detect_rug_pull, Box::new(RugPullPatternDetector::new())),
+            (config.pattern_detection.detect_governance, Box::new(GovernancePatternDetector::new())),
+        ];
 
-        if config.pattern_detection.detect_erc20 {
-            pattern_detectors.push(Box::new(Erc20PatternDetector::new()));
-        }
-
-        if config.pattern_detection.detect_erc721 {
-            pattern_detectors.push(Box::new(Erc721PatternDetector::new()));
-        }
-
-        if config.pattern_detection.detect_dex {
-            pattern_detectors.push(Box::new(DexPatternDetector::new()));
-        }
-
-        if config.pattern_detection.detect_lending {
-            pattern_detectors.push(Box::new(LendingPatternDetector::new()));
-        }
-
-        if config.pattern_detection.detect_flash_loan {
-            pattern_detectors.push(Box::new(FlashLoanPatternDetector::new()));
-        }
-
-        if config.pattern_detection.detect_mev {
-            pattern_detectors.push(Box::new(MevPatternDetector::new()));
-        }
-
-        if config.pattern_detection.detect_rug_pull {
-            pattern_detectors.push(Box::new(RugPullPatternDetector::new()));
-        }
-
-        if config.pattern_detection.detect_governance {
-            pattern_detectors.push(Box::new(GovernancePatternDetector::new()));
-        }
+        let pattern_detectors: Vec<Box<dyn PatternDetector>> = detectors_all
+            .into_iter()
+            .filter_map(|(enabled, detector)| if enabled { Some(detector) } else { None })
+            .collect();
 
         Self {
             config,

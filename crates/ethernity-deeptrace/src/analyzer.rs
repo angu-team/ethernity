@@ -66,15 +66,15 @@ impl TraceAnalyzer {
                 index: 0,
                 depth: 0,
                 call_type: trace.call_type.as_deref().map(CallType::from).unwrap_or(CallType::Call),
-                from: Address::from_slice(&hex::decode(trace.from.trim_start_matches("0x")).unwrap_or_default()),
+                from: crate::utils::parse_address(&trace.from),
                 to: if trace.to.is_empty() { None } else {
-                    Some(Address::from_slice(&hex::decode(trace.to.trim_start_matches("0x")).unwrap_or_default()))
+                    Some(crate::utils::parse_address(&trace.to))
                 },
                 value: U256::from_dec_str(&trace.value).unwrap_or(U256::zero()),
                 gas: U256::from_dec_str(&trace.gas).unwrap_or(U256::zero()),
                 gas_used: U256::from_dec_str(&trace.gas_used).unwrap_or(U256::zero()),
-                input: hex::decode(trace.input.trim_start_matches("0x")).unwrap_or_default(),
-                output: hex::decode(trace.output.trim_start_matches("0x")).unwrap_or_default(),
+                input: crate::utils::decode_hex(&trace.input),
+                output: crate::utils::decode_hex(&trace.output),
                 error: trace.error.clone(),
                 children: Vec::new(),
             },
@@ -146,57 +146,42 @@ impl TraceAnalyzer {
         call_index: usize,
     ) -> Result<Option<TokenTransfer>, ()> {
         // Verifica se é um evento Transfer ERC20/ERC721
-        if let Some(topics) = log.get("topics").and_then(|t| t.as_array()) {
-            if topics.len() >= 3 {
-                let transfer_signature = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+        let topics = match log.get("topics").and_then(|t| t.as_array()) {
+            Some(t) if t.len() >= 3 => t,
+            _ => return Ok(None),
+        };
 
-                if let Some(topic0) = topics[0].as_str() {
-                    if topic0 == transfer_signature {
-                        // Extrai endereços from e to
-                        let from = Address::from_slice(&hex::decode(
-                            topics[1].as_str().unwrap_or("").trim_start_matches("0x")
-                        ).unwrap_or_default());
-
-                        let to = Address::from_slice(&hex::decode(
-                            topics[2].as_str().unwrap_or("").trim_start_matches("0x")
-                        ).unwrap_or_default());
-
-                        // Determina o tipo de token e valor
-                        let (token_type, amount, token_id) = if topics.len() == 4 {
-                            // ERC721 - token_id no terceiro tópico
-                            let token_id = U256::from_str_radix(
-                                topics[3].as_str().unwrap_or("0").trim_start_matches("0x"), 16
-                            ).unwrap_or(U256::zero());
-                            (TokenType::Erc721, U256::one(), Some(token_id))
-                        } else if let Some(data) = log.get("data").and_then(|d| d.as_str()) {
-                            // ERC20 - valor nos dados
-                            let amount = U256::from_str_radix(
-                                data.trim_start_matches("0x"), 16
-                            ).unwrap_or(U256::zero());
-                            (TokenType::Erc20, amount, None)
-                        } else {
-                            return Ok(None);
-                        };
-
-                        let token_address = Address::from_slice(&hex::decode(
-                            log.get("address").and_then(|a| a.as_str()).unwrap_or("").trim_start_matches("0x")
-                        ).unwrap_or_default());
-
-                        return Ok(Some(TokenTransfer {
-                            token_type,
-                            token_address,
-                            from,
-                            to,
-                            amount,
-                            token_id,
-                            call_index,
-                        }));
-                    }
-                }
-            }
+        let transfer_sig = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+        if topics[0].as_str().unwrap_or("") != transfer_sig {
+            return Ok(None);
         }
 
-        Ok(None)
+        let from = crate::utils::parse_address(topics[1].as_str().unwrap_or(""));
+        let to = crate::utils::parse_address(topics[2].as_str().unwrap_or(""));
+
+        let (token_type, amount, token_id) = if topics.len() == 4 {
+            let token_id = crate::utils::parse_u256_hex(topics[3].as_str().unwrap_or("0"));
+            (TokenType::Erc721, U256::one(), Some(token_id))
+        } else if let Some(data) = log.get("data").and_then(|d| d.as_str()) {
+            let amount = crate::utils::parse_u256_hex(data);
+            (TokenType::Erc20, amount, None)
+        } else {
+            return Ok(None);
+        };
+
+        let token_address = crate::utils::parse_address(
+            log.get("address").and_then(|a| a.as_str()).unwrap_or("")
+        );
+
+        Ok(Some(TokenTransfer {
+            token_type,
+            token_address,
+            from,
+            to,
+            amount,
+            token_id,
+            call_index,
+        }))
     }
 
     /// Extrai criações de contratos
@@ -219,7 +204,7 @@ impl TraceAnalyzer {
         if call_type == CallType::Create || call_type == CallType::Create2 {
             if !trace.output.is_empty() {
                 // Extrai o endereço do contrato criado a partir do output
-                let output_bytes = hex::decode(trace.output.trim_start_matches("0x")).unwrap_or_default();
+                let output_bytes = crate::utils::decode_hex(&trace.output);
                 let contract_address = if output_bytes.len() >= 20 {
                     Address::from_slice(&output_bytes[output_bytes.len() - 20..])
                 } else {
@@ -235,12 +220,12 @@ impl TraceAnalyzer {
                     .map_err(|_| ())?;
                 let contract_type = self.determine_contract_type(&bytecode)?;
 
-                let from = Address::from_slice(&hex::decode(trace.from.trim_start_matches("0x")).unwrap_or_default());
+                let from = crate::utils::parse_address(&trace.from);
 
                 let creation = ContractCreation {
                     creator: from,
                     contract_address,
-                    init_code: hex::decode(trace.input.trim_start_matches("0x")).unwrap_or_default(),
+                    init_code: crate::utils::decode_hex(&trace.input),
                     contract_type,
                     call_index,
                 };
@@ -341,15 +326,15 @@ impl TraceAnalyzer {
         let step = ExecutionStep {
             depth,
             call_type: trace.call_type.as_deref().map(CallType::from).unwrap_or(CallType::Call),
-            from: Address::from_slice(&hex::decode(trace.from.trim_start_matches("0x")).unwrap_or_default()),
+            from: crate::utils::parse_address(&trace.from),
             to: if trace.to.is_empty() {
                 Address::zero()
             } else {
-                Address::from_slice(&hex::decode(trace.to.trim_start_matches("0x")).unwrap_or_default())
+                crate::utils::parse_address(&trace.to)
             },
             value: U256::from_dec_str(&trace.value).unwrap_or(U256::zero()),
-            input: hex::decode(trace.input.trim_start_matches("0x")).unwrap_or_default(),
-            output: hex::decode(trace.output.trim_start_matches("0x")).unwrap_or_default(),
+            input: crate::utils::decode_hex(&trace.input),
+            output: crate::utils::decode_hex(&trace.output),
             gas_used: U256::from_dec_str(&trace.gas_used).unwrap_or(U256::zero()),
             error: trace.error.clone(),
         };
