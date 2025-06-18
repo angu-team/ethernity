@@ -1,15 +1,20 @@
-# Exemplo de Detecção de Eventos - Rust
+# Exemplos - Rust
 
-Este exemplo demonstra como utilizar o `ethernity-deeptrace` para analisar uma transação específica e executar os detectores de eventos disponíveis.
+Aqui estão exemplos de como utilizar o `ethernity-deeptrace` para analisar transações Ethereum.
 
-## Uso
+## Detecção de Eventos
 
 ```bash
 cargo run --example event_detector -- <RPC_ENDPOINT> <TX_HASH>
 ```
 
-- `<RPC_ENDPOINT>`: URL do node Ethereum (HTTP ou WebSocket).
-- `<TX_HASH>`: Hash da transação a ser analisada.
+Analisa a transação indicada e executa os detectores de eventos disponíveis, mostrando as ocorrências encontradas (reentrancy, sandwich attack etc.).
 
-O programa exibirá na saída padrão os eventos identificados para a transação informada ou avisará caso nada seja encontrado.
+## Detecção de Padrões
+
+```bash
+cargo run --example pattern_detector -- <RPC_ENDPOINT> <TX_HASH>
+```
+
+Executa a análise completa e lista os padrões DeFi (flash loans, arbitragem, rug pull e outros) detectados para a transação informada.
 
