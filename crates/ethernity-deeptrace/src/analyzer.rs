@@ -199,13 +199,15 @@ impl TraceAnalyzer {
                 .map(CallType::from)
                 .unwrap_or(CallType::Call);
 
-            if (call_type == CallType::Create || call_type == CallType::Create2) && !node.output.is_empty() {
-                let output_bytes = crate::utils::decode_hex(&node.output);
-                let contract_address = if output_bytes.len() >= 20 {
-                    Address::from_slice(&output_bytes[output_bytes.len() - 20..])
-                } else {
-                    Address::zero()
-                };
+            if call_type == CallType::Create || call_type == CallType::Create2 {
+                // O endereço do contrato é fornecido no campo `to` para traces
+                // do callTracer. Usar o `output` pode gerar valores incorretos
+                // quando o tracer não retorna o endereço no retorno da chamada.
+                let contract_address = crate::utils::parse_address(&node.to);
+
+                if contract_address == Address::zero() {
+                    continue;
+                }
 
                 let bytecode = self
                     .context
