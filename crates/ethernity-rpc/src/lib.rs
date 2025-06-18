@@ -134,14 +134,32 @@ impl EthernityRpcClient {
         // Executa a chamada RPC diretamente
         let result = match &self.transport {
             TransportType::Http(web3) => {
-                web3.transport().execute("debug_traceTransaction", params)
-                    .await
-                    .map_err(|e| Error::RpcError(format!("Falha ao obter trace da transação: {}", e)))?
+                match web3.transport().execute("debug_traceTransaction", params).await {
+                    Ok(res) => res,
+                    Err(e) => {
+                        let msg = e.to_string();
+                        if msg.contains("not allowed") || msg.contains("forbidden") || msg.contains("denied") || msg.contains("Method not found") {
+                            eprintln!("\u{26A0}\u{FE0F} Não foi possível continuar: uso de callTrace não permitido pelo RPC fornecido");
+                            return Err(Error::RpcError("Uso de callTrace não permitido pelo RPC fornecido".to_string()));
+                        } else {
+                            return Err(Error::RpcError(format!("Falha ao obter trace da transação: {}", e)));
+                        }
+                    }
+                }
             },
             TransportType::WebSocket(web3) => {
-                web3.transport().execute("debug_traceTransaction", params)
-                    .await
-                    .map_err(|e| Error::RpcError(format!("Falha ao obter trace da transação: {}", e)))?
+                match web3.transport().execute("debug_traceTransaction", params).await {
+                    Ok(res) => res,
+                    Err(e) => {
+                        let msg = e.to_string();
+                        if msg.contains("not allowed") || msg.contains("forbidden") || msg.contains("denied") || msg.contains("Method not found") {
+                            eprintln!("\u{26A0}\u{FE0F} Não foi possível continuar: uso de callTrace não permitido pelo RPC fornecido");
+                            return Err(Error::RpcError("Uso de callTrace não permitido pelo RPC fornecido".to_string()));
+                        } else {
+                            return Err(Error::RpcError(format!("Falha ao obter trace da transação: {}", e)));
+                        }
+                    }
+                }
             }
         };
         
