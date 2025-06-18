@@ -2,9 +2,10 @@
 resolver = "2"
 members = [
     "crates/ethernity-core",
-    "crates/ethernity-deeptrace", 
+    "crates/ethernity-deeptrace",
     "crates/ethernity-rpc",
     "crates/ethernity-sdk",
+    "crates/ethernity-finder",
 ]
 
 [workspace.package]
