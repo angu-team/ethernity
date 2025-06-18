@@ -8,9 +8,9 @@
 
 mod memory;
 mod trace;
-mod analyzer;
+pub mod analyzer;
 mod patterns;
-mod detectors;
+pub mod detectors;
 mod utils;
 
 use ethereum_types::{Address, H256, U256};

@@ -26,7 +26,7 @@ async fn main() -> anyhow::Result<()> {
     let analyzer = DeepTraceAnalyzer::new(rpc_client.clone(), Some(TraceAnalysisConfig::default()));
 
     println!("🔍 Analisando transação {tx_hash:?}...");
-    let tx_analysis = analyzer.analyze_transaction(tx_hash).await?;
+    let tx_analysis = analyzer.analyze_transaction(tx_hash).await.expect("ERR");
 
     // Constrói o resultado de análise para os detectores
     let analysis_result = TraceAnalysisResult {
@@ -38,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Executa todos os detectores disponíveis
     let detector_manager = DetectorManager::new();
-    let events = detector_manager.detect_all(&analysis_result).await?;
+    let events = detector_manager.detect_all(&analysis_result).await.expect("ERR");
 
     if events.is_empty() {
         println!("Nenhum evento suspeito detectado para a transação {tx_hash:?}.");
