@@ -460,3 +460,23 @@ impl CacheUtils {
             analysis.token_transfers.len() > 5
     }
 }
+
+/// Converte uma string hexadecimal em bytes.
+pub fn decode_hex(data: &str) -> Vec<u8> {
+    hex::decode(data.trim_start_matches("0x")).unwrap_or_default()
+}
+
+/// Converte uma string hexadecimal em um endereço Ethereum.
+pub fn parse_address(hex_addr: &str) -> Address {
+    let bytes = decode_hex(hex_addr);
+    if bytes.len() >= 20 {
+        Address::from_slice(&bytes[bytes.len() - 20..])
+    } else {
+        Address::zero()
+    }
+}
+
+/// Converte uma string hexadecimal em U256.
+pub fn parse_u256_hex(hex_val: &str) -> U256 {
+    U256::from_str_radix(hex_val.trim_start_matches("0x"), 16).unwrap_or_else(|_| U256::zero())
+}

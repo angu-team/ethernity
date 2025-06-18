@@ -168,6 +168,7 @@ Dupla licença MIT/Apache-2.0
 ## Contribuição
 
 Contribuições são bem-vindas! Por favor, consulte as diretrizes de contribuição em CONTRIBUTING.md.
+Para manter o código consistente, siga também os [Princípios de Desenvolvimento](./docs/software_principles.md).
 
 ## Suporte
 
