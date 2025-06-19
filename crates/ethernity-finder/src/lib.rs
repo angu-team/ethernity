@@ -268,7 +268,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_hex_parse() {
-        let opts = FinderOptions { chain_id: 1, methods: Vec::new(), limit: None };
+        let opts = FinderOptions { chain_id: 1, methods: vec![], limit: None };
         let client = Client::new();
         let res = verify_node(&client, "127.0.0.1", 8545, &opts).await;
         // As we don't have a node, just ensure it doesn't panic and returns Ok
