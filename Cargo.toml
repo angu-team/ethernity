@@ -6,6 +6,7 @@ members = [
     "crates/ethernity-rpc",
     "crates/ethernity-sdk",
     "crates/ethernity-finder",
+    "crates/ethernity-fingerprint",
 ]
 
 [workspace.package]
