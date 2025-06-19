@@ -1,6 +1,6 @@
 use std::env;
 
-use ethernity_finder::{FinderOptions, NodeFinder, ShodanFinder};
+use ethernity_finder::{FinderOptions, NodeFinder, ShodanFinder, RpcMethod};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -18,8 +18,20 @@ async fn main() -> anyhow::Result<()> {
     };
     let methods = args[3]
         .split(',')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
+        .filter_map(|s| {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                match trimmed.parse::<RpcMethod>() {
+                    Ok(m) => Some(m),
+                    Err(e) => {
+                        eprintln!("Ignorando método desconhecido '{}': {}", trimmed, e);
+                        None
+                    }
+                }
+            }
+        })
         .collect::<Vec<_>>();
 
     let finder = ShodanFinder::new();

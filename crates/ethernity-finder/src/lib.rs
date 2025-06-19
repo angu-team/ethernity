@@ -8,6 +8,57 @@ use ethernity_core::{error::Result, Error};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use async_trait::async_trait;
+use std::fmt;
+use std::str::FromStr;
+
+/// Métodos RPC internos suportados
+#[derive(Debug, Clone)]
+pub enum RpcMethod {
+    /// `debug_traceTransaction`
+    DebugTraceTransaction,
+    /// `admin_nodeInfo`
+    AdminNodeInfo,
+    /// `admin_peers`
+    AdminPeers,
+    /// `txpool_content`
+    TxPoolContent,
+    /// `trace_block`
+    TraceBlock,
+}
+
+impl RpcMethod {
+    /// Representação em string do método
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RpcMethod::DebugTraceTransaction => "debug_traceTransaction",
+            RpcMethod::AdminNodeInfo => "admin_nodeInfo",
+            RpcMethod::AdminPeers => "admin_peers",
+            RpcMethod::TxPoolContent => "txpool_content",
+            RpcMethod::TraceBlock => "trace_block",
+        }
+    }
+}
+
+impl fmt::Display for RpcMethod {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl FromStr for RpcMethod {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "debug_traceTransaction" => Ok(RpcMethod::DebugTraceTransaction),
+            "admin_nodeInfo" => Ok(RpcMethod::AdminNodeInfo),
+            "admin_peers" => Ok(RpcMethod::AdminPeers),
+            "txpool_content" => Ok(RpcMethod::TxPoolContent),
+            "trace_block" => Ok(RpcMethod::TraceBlock),
+            other => Err(format!("Método desconhecido: {}", other)),
+        }
+    }
+}
 
 /// Opções para busca de nodes
 #[derive(Debug, Clone)]
@@ -15,7 +66,7 @@ pub struct FinderOptions {
     /// Chain ID desejado
     pub chain_id: u64,
     /// Métodos RPC internos que o node deve suportar
-    pub methods: Vec<String>,
+    pub methods: Vec<RpcMethod>,
     /// Quantidade máxima de nodes (None para "all")
     pub limit: Option<usize>,
 }
@@ -23,7 +74,7 @@ pub struct FinderOptions {
 /// Status de verificação de um método RPC
 #[derive(Debug, Clone)]
 pub struct MethodStatus {
-    pub method: String,
+    pub method: RpcMethod,
     pub success: bool,
     pub error: Option<String>,
 }
@@ -154,7 +205,7 @@ async fn verify_node(client: &Client, ip: &str, port: u16, opts: &FinderOptions)
     for method in &opts.methods {
         let req = RpcRequest {
             jsonrpc: "2.0",
-            method,
+            method: method.as_str(),
             params: vec![],
             id: 1,
         };
@@ -217,7 +268,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_hex_parse() {
-        let opts = FinderOptions { chain_id: 1, methods: vec![], limit: None };
+        let opts = FinderOptions { chain_id: 1, methods: Vec::new(), limit: None };
         let client = Client::new();
         let res = verify_node(&client, "127.0.0.1", 8545, &opts).await;
         // As we don't have a node, just ensure it doesn't panic and returns Ok
