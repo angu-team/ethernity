@@ -79,7 +79,12 @@ fn interpret_function(func: &FunctionInfo) -> (Vec<String>, Mutability) {
                         }
                     }
                 }
-                0xf1 | 0xf2 | 0xf4 | 0xfa | 0xff => { mutability = Mutability::Mutative; }
+                // External calls and destructive operations imply mutability,
+                // except for STATICCALL (0xfa) which is read-only.
+                0xf1 | 0xf2 | 0xf4 | 0xf0 | 0xf5 | 0xff => { mutability = Mutability::Mutative; }
+                0xfa => {
+                    if mutability < Mutability::View { mutability = Mutability::View; }
+                }
                 0xfd => ir.push(stmt_to_string(&Stmt::Revert)),
                 0xf3 => { if let Some(val) = stack.pop() { ir.push(stmt_to_string(&Stmt::Return(val))); } }
                 _ => {}
