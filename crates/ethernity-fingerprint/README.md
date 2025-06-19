@@ -12,6 +12,14 @@ Inclui dois algoritmos principais:
   deterministicamente para garantir hashes reprodutíveis e gera dois hashes:
   um da própria IR e outro somente da estrutura do CFG.
 
+Durante essa interpretação a mutabilidade (Pure, View ou Mutative) é inferida
+a partir dos opcodes observados. Leituras de armazenamento (`SLOAD`) elevam a
+classificação para *View*. Instruções que podem modificar o estado, como
+`SSTORE`, `CALL`, `CALLCODE`, `DELEGATECALL`, `CREATE`, `CREATE2` ou
+`SELFDESTRUCT`, marcam a função como *Mutative*. Por outro lado, `STATICCALL`
+é tratado como operação somente leitura, não alterando o estado e mantendo a
+classificação no máximo em *View*.
+
 A implementação opera 100% offline e não depende de metadados ou fonte do
 contrato. O CFG é construído a partir do bytecode e cada bloco é interpretado
 para gerar uma IR semântica canônica, resistente a reorganizações e ruído
