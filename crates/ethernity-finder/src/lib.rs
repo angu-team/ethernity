@@ -48,7 +48,7 @@ impl fmt::Display for RpcMethod {
 impl FromStr for RpcMethod {
     type Err = String;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s {
             "debug_traceTransaction" => Ok(RpcMethod::DebugTraceTransaction),
             "admin_nodeInfo" => Ok(RpcMethod::AdminNodeInfo),
@@ -268,7 +268,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_hex_parse() {
-        let opts = FinderOptions { chain_id: 1, methods: Vec::new(), limit: None };
+        let opts = FinderOptions { chain_id: 1, methods: vec![], limit: None };
         let client = Client::new();
         let res = verify_node(&client, "127.0.0.1", 8545, &opts).await;
         // As we don't have a node, just ensure it doesn't panic and returns Ok
