@@ -1078,6 +1078,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ethernity-fingerprint"
+version = "0.1.0"
+dependencies = [
+ "ethereum-types",
+ "ethernity-core",
+ "hex",
+ "tiny-keccak",
+]
+
+[[package]]
 name = "ethernity-rpc"
 version = "0.1.0"
 dependencies = [
