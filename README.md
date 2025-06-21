@@ -7,17 +7,10 @@ O Ethernity é um workspace Rust para interação e análise avançada de transa
 ## Arquitetura do Sistema
 
 ```
-┌─────────────────────┐    ┌──────────────────────┐    ┌─────────────────────┐
-│   ethernity-sdk     │    │  ethernity-deeptrace │    │   ethernity-rpc     │
-│  (SDKs Consumidor)  │    │ (Análise Profunda)   │    │  (Cliente RPC)      │
-└─────────────────────┘    └──────────────────────┘    └─────────────────────┘
-           │                          │                          │
-           └──────────────────────────┼──────────────────────────┘
-                                      │
-                         ┌─────────────────────┐
-                         │  ethernity-core     │
-                         │ (Tipos e Traits)    │
-                         └─────────────────────┘
+┌──────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐
+│  ethernity-deeptrace │    │   ethernity-rpc     │    │  ethernity-core     │
+│  (Análise Profunda)  │    │  (Cliente RPC)      │    │ (Tipos e Traits)    │
+└──────────────────────┘    └─────────────────────┘    └─────────────────────┘
 ```
 
 ## Crates
@@ -52,13 +45,6 @@ O Ethernity é um workspace Rust para interação e análise avançada de transa
 - Detectores especializados para diferentes tipos de eventos
 - Gerenciamento avançado de memória
 
-### 📡 [ethernity-sdk](./crates/ethernity-sdk/)
-**SDKs para consumidores**
-- Interface simples para consumo de eventos via Kafka
-- Sistema de subscrições flexível com filtros
-- Handlers assíncronos para processamento de eventos
-- Configuração automática de grupos de consumidores
-- Suporte a autenticação SASL/SSL
 
 ## Fluxo de Dados
 
@@ -69,13 +55,10 @@ graph TD
     B --> C[ethernity-deeptrace]
     C --> D[Pattern Detection]
     D --> E[Event Generation]
-    E --> F[Kafka Topics]
-    F --> G[ethernity-sdk]
-    G --> H[Consumer Applications]
-    
+    E --> H[Notification System]
+
     I[ethernity-core] -.-> B
     I -.-> C
-    I -.-> G
 ```
 
 ## Casos de Uso
@@ -109,7 +92,6 @@ graph TD
 ### Pré-requisitos
 - Rust 1.70+
 - Acesso a um node Ethereum (Geth, Erigon, etc.)
-- Kafka cluster (opcional, para ethernity-sdk)
 
 ### Build do Workspace
 ```bash
@@ -151,22 +133,6 @@ let analyzer = DeepTraceAnalyzer::new(rpc_client, None);
 let analysis = analyzer.analyze_transaction(tx_hash).await?;
 ```
 
-### Consumidor de Eventos
-```rust
-use ethernity_sdk::*;
-
-let config = ConsumerConfig::builder()
-    .kafka_brokers("localhost:9092")
-    .consumer_group("my-app")
-    .build()?;
-
-let consumer = EthernityConsumer::new(config).await?;
-consumer.subscribe(EventType::TokenSwap)
-    .with_handler(|event| async move {
-        println!("Token swap: {:?}", event);
-    })
-    .start().await?;
-```
 
 ## Licença
 

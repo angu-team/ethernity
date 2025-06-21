@@ -15,8 +15,7 @@ ethernity/
 │   ├── ethernity-core/        # Tipos e utilitários compartilhados
 │   ├── ethernity-deeptrace/   # Análise profunda de transações
 │   ├── ethernity-rpc/         # Cliente RPC otimizado
-│   ├── ethernity-finder/      # Busca de nodes Ethereum
-│   └── ethernity-sdk/         # SDKs para consumidores
+│   └── ethernity-finder/      # Busca de nodes Ethereum
 └── tests/                     # Testes de integração e performance
 ```
 
@@ -53,13 +52,6 @@ Cliente RPC otimizado para comunicação com nodes Ethereum:
 Busca de nodes Ethereum utilizando a API do Shodan. Responsável por localizar
 endpoints RPC expostos e validar métodos internos disponíveis.
 
-### ethernity-sdk
-
-SDKs para consumidores da plataforma:
-
-- APIs de alto nível
-- Abstração da complexidade do Kafka e RPC
-- Interfaces para diferentes linguagens
 
 ## Decisões Técnicas
 
@@ -77,19 +69,6 @@ A workspace implementa diversas estratégias para gerenciamento eficiente de mem
 
 5. **Alocação Zero-Copy**: Utilização de técnicas zero-copy sempre que possível para evitar duplicação de dados na memória.
 
-### Integração Kafka
-
-A integração com Kafka foi implementada com foco em:
-
-1. **Garantias de Entrega**: Suporte a diferentes níveis de garantia (at-most-once, at-least-once, exactly-once).
-
-2. **Particionamento Inteligente**: Estratégias de particionamento baseadas em conteúdo para balanceamento de carga.
-
-3. **Compressão**: Compressão automática de mensagens para reduzir uso de rede e armazenamento.
-
-4. **Batching**: Agrupamento de mensagens para maior throughput.
-
-5. **Backpressure**: Mecanismos para lidar com sobrecarga de mensagens.
 
 ### Cliente RPC
 
@@ -157,7 +136,6 @@ O cliente RPC foi projetado para:
 ```rust
 // Criar cliente de eventos
 let config = EventsConfig::default()
-    .with_kafka_brokers(vec!["kafka:9092"])
     .with_subscription_type(SubscriptionType::TokenTransfer);
 
 let client = EventsClient::new(config)?;
@@ -256,12 +234,7 @@ client.start()?;
 
 ## Recomendações para Produção
 
-1. **Infraestrutura Kafka**:
-   - Mínimo de 3 brokers para alta disponibilidade
-   - Replicação de tópicos com fator 3
-   - Monitoramento com Prometheus/Grafana
-
-2. **Escalabilidade**:
+1. **Escalabilidade**:
    - Distribuir processamento entre múltiplas instâncias
    - Utilizar balanceamento de carga para endpoints RPC
    - Considerar sharding para grandes volumes de dados
@@ -271,12 +244,11 @@ client.start()?;
    - Monitorar latência de conexões WebSocket
    - Acompanhar taxa de erros RPC
 
-4. **Backup e Recuperação**:
-   - Backup regular dos tópicos Kafka
+3. **Backup e Recuperação**:
    - Estratégia de recuperação de desastres
    - Testes periódicos de failover
 
-5. **Atualizações**:
+4. **Atualizações**:
    - Implementar estratégia de rolling updates
    - Manter compatibilidade com versões anteriores
    - Testes de regressão antes de atualizações
