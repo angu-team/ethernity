@@ -12,6 +12,7 @@ O `ethernity-deeptrace` é uma biblioteca especializada para análise profunda d
 - 🌳 **Árvore de Chamadas**: Representação hierárquica de todas as interações
 - 💰 **Análise de Fluxo de Fundos**: Rastreamento detalhado de transferências de tokens
 - 🤖 **Análise MEV**: Detecção de atividades de Maximal Extractable Value
+- 📊 **Detecção de Padrões**: Identificação de contratos e comportamentos
 - 🧠 **Gerenciamento de Memória**: Otimizações para análise de traces grandes
 - ⚡ **Processamento Paralelo**: Análise concorrente quando possível
 
@@ -23,6 +24,7 @@ ethernity-deeptrace/
 │   ├── lib.rs           # Interface principal e tipos públicos
 │   ├── analyzer.rs      # Analisador principal de traces
 │   ├── trace.rs         # Estruturas de trace e call tree
+│   ├── patterns/        # Detectores de padrões
 │   ├── memory.rs        # Gerenciamento de memória e cache
 │   └── utils.rs         # Utilitários para análise
 ├── Cargo.toml           # Dependências e metadados
@@ -608,92 +610,6 @@ Padrões detectados:
 ---
 
 ## 🚀 Exemplos Avançados
-
-### Sistema de Alertas de Segurança
-
-```rust
-use ethernity_deeptrace::*;
-use tokio::time::{interval, Duration};
-
-struct SecurityMonitor {
-    analyzer: Arc<DeepTraceAnalyzer>,
-    alert_threshold: f64,
-}
-
-impl SecurityMonitor {
-    pub fn new(analyzer: Arc<DeepTraceAnalyzer>) -> Self {
-        Self {
-            analyzer,
-            alert_threshold: 0.8, // 80% de confiança
-        }
-    }
-    
-    pub async fn monitor_transaction(&self, tx_hash: TransactionHash) -> Result<Vec<SecurityAlert>, Error> {
-        let analysis = self.analyzer.analyze_transaction(tx_hash).await?;
-        let mut alerts = Vec::new();
-        
-        // Verificar padrões críticos
-        for pattern in &analysis.detected_patterns {
-            if pattern.confidence >= self.alert_threshold {
-                if let PatternType::Erc20Creation = pattern.pattern_type {
-                    // Nova criação de token detectada
-                }
-            }
-        }
-        
-        
-        Ok(alerts)
-    }
-}
-
-#[derive(Debug)]
-enum SecurityAlert {
-    MevActivity {
-        tx_hash: TransactionHash,
-        confidence: f64,
-        addresses: Vec<Address>,
-    },
-    RugPull {
-        tx_hash: TransactionHash,
-        confidence: f64,
-        token_address: Option<Address>,
-    },
-    SandwichAttack {
-        tx_hash: TransactionHash,
-        confidence: f64,
-        addresses: Vec<Address>,
-    },
-    ReentrancyAttack {
-        tx_hash: TransactionHash,
-        confidence: f64,
-        vulnerable_contract: Option<Address>,
-    },
-}
-
-// Uso do monitor
-let monitor = SecurityMonitor::new(analyzer.clone());
-let alerts = monitor.monitor_transaction(tx_hash).await?;
-
-for alert in alerts {
-    match alert {
-        SecurityAlert::RugPull { tx_hash, confidence, token_address } => {
-            println!("🚨 RUG PULL DETECTADO!");
-            println!("   TX: {}", tx_hash);
-            println!("   Confiança: {:.1}%", confidence * 100.0);
-            if let Some(token) = token_address {
-                println!("   Token: {}", token);
-            }
-        },
-        SecurityAlert::SandwichAttack { tx_hash, confidence, addresses } => {
-            println!("🥪 SANDWICH ATTACK DETECTADO!");
-            println!("   TX: {}", tx_hash);
-            println!("   Confiança: {:.1}%", confidence * 100.0);
-            println!("   Endereços envolvidos: {} endereços", addresses.len());
-        },
-        _ => {}
-    }
-}
-```
 
 ### Análise Comparativa
 

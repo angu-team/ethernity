@@ -9,8 +9,8 @@
 mod memory;
 mod trace;
 pub mod analyzer;
-
-// Os módulos de detectores foram removidos para simplificar a crate
+mod patterns;
+// módulos de detectores removidos
 mod utils;
 
 use ethereum_types::{Address, H256, U256};
@@ -19,6 +19,7 @@ use std::sync::Arc;
 pub use analyzer::*;
 // Re-exportações públicas
 pub use memory::*;
+pub use patterns::*;
 pub use trace::*;
 pub use utils::*;
 
@@ -35,6 +36,8 @@ pub struct TraceAnalysisConfig {
     pub enable_cache: bool,
     /// Habilita análise paralela quando possível
     pub enable_parallel: bool,
+    /// Habilita detecção de padrões específicos
+    pub pattern_detection: PatternDetectionConfig,
 }
 
 impl Default for TraceAnalysisConfig {
@@ -45,6 +48,22 @@ impl Default for TraceAnalysisConfig {
             timeout_ms: 30000, // 30 segundos
             enable_cache: true,
             enable_parallel: true,
+            pattern_detection: PatternDetectionConfig::default(),
+        }
+    }
+}
+
+/// Configuração para detecção de padrões
+#[derive(Debug, Clone)]
+pub struct PatternDetectionConfig {
+    /// Habilita detecção de padrões de token ERC20
+    pub detect_erc20: bool,
+}
+
+impl Default for PatternDetectionConfig {
+    fn default() -> Self {
+        Self {
+            detect_erc20: true,
         }
     }
 }
@@ -54,6 +73,7 @@ pub struct DeepTraceAnalyzer {
     config: TraceAnalysisConfig,
     rpc_client: Arc<dyn ethernity_core::traits::RpcProvider>,
     memory_manager: Arc<memory::memory::MemoryManager>,
+    pattern_detectors: Vec<Box<dyn PatternDetector>>,
 }
 
 impl DeepTraceAnalyzer {
@@ -65,10 +85,21 @@ impl DeepTraceAnalyzer {
         let config = config.unwrap_or_default();
         let memory_manager = Arc::new(memory::memory::MemoryManager::new());
 
+        // Inicializa os detectores de padrões
+        let detectors_all: Vec<(bool, Box<dyn PatternDetector>)> = vec![
+            (config.pattern_detection.detect_erc20, Box::new(Erc20PatternDetector::new())),
+        ];
+        
+        let pattern_detectors: Vec<Box<dyn PatternDetector>> = detectors_all
+            .into_iter()
+            .filter_map(|(enabled, detector)| if enabled { Some(detector) } else { None })
+            .collect();
+
         Self {
             config,
             rpc_client,
             memory_manager,
+            pattern_detectors,
         }
     }
 
@@ -90,7 +121,7 @@ impl DeepTraceAnalyzer {
 
         let trace_analyzer = TraceAnalyzer::new(context);
         let analysis = trace_analyzer.analyze(&trace, &receipt).await.map_err(|_| ())?;
-        let patterns = Vec::new();
+        let patterns = self.detect_patterns(&analysis).await?;
 
         Ok(Self::build_transaction_analysis(
             tx_hash,
@@ -198,6 +229,18 @@ impl DeepTraceAnalyzer {
             detected_patterns: patterns,
             execution_path: analysis.execution_path,
         }
+    }
+
+    /// Detecta padrões na análise
+    async fn detect_patterns(&self, analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>, ()> {
+        let mut patterns = Vec::new();
+
+        for detector in &self.pattern_detectors {
+            let detected = detector.detect(analysis).await.map_err(|_| ())?;
+            patterns.extend(detected);
+        }
+
+        Ok(patterns)
     }
 
     /// Analisa um lote de transações
