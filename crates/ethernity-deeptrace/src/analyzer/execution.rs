@@ -31,3 +31,39 @@ fn build_execution_path_recursive(trace: &CallTrace, depth: usize, path: &mut Ve
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_trace() -> CallTrace {
+        CallTrace {
+            from: "0x0000000000000000000000000000000000000001".into(), gas: "0".into(), gas_used: "0".into(),
+            to: "0x0000000000000000000000000000000000000002".into(), input: "0x".into(), output: "0x".into(), value: "0".into(), error: None,
+            calls: Some(vec![CallTrace {
+                from: "0x0000000000000000000000000000000000000002".into(), gas: "0".into(), gas_used: "0".into(),
+                to: "".into(), input: "0x".into(), output: "0x".into(), value: "0".into(), error: None,
+                calls: None, call_type: Some("CALL".into())
+            }]),
+            call_type: Some("CALL".into()),
+        }
+    }
+
+    #[test]
+    fn test_build_execution_path_depth() {
+        let trace = sample_trace();
+        let mut cfg = TraceAnalysisConfig::default();
+        cfg.max_depth = 0;
+        let steps = build_execution_path(&trace, &cfg).unwrap();
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0].to, Address::from_low_u64_be(2));
+    }
+
+    #[test]
+    fn test_build_execution_path_full() {
+        let trace = sample_trace();
+        let steps = build_execution_path(&trace, &TraceAnalysisConfig::default()).unwrap();
+        assert_eq!(steps.len(), 2);
+        assert_eq!(steps[1].to, Address::zero());
+    }
+}

@@ -65,3 +65,53 @@ fn determine_contract_type(bytecode: &[u8]) -> Result<ContractType, ()> {
     if create_ops > 1 { return Ok(ContractType::Factory); }
     Ok(ContractType::Unknown)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_trait::async_trait;
+
+    struct MockRpc { code: Vec<u8> }
+
+    #[async_trait]
+    impl ethernity_core::traits::RpcProvider for MockRpc {
+        async fn get_transaction_trace(&self, _tx: ethernity_core::types::TransactionHash) -> ethernity_core::error::Result<Vec<u8>> { Ok(vec![]) }
+        async fn get_transaction_receipt(&self, _tx: ethernity_core::types::TransactionHash) -> ethernity_core::error::Result<Vec<u8>> { Ok(vec![]) }
+        async fn get_code(&self, _address: Address) -> ethernity_core::error::Result<Vec<u8>> { Ok(self.code.clone()) }
+        async fn call(&self, _to: Address, _data: Vec<u8>) -> ethernity_core::error::Result<Vec<u8>> { Ok(vec![]) }
+        async fn get_block_number(&self) -> ethernity_core::error::Result<u64> { Ok(0) }
+    }
+
+    #[tokio::test]
+    async fn test_extract_contract_creations() {
+        let trace = CallTrace {
+            from: "0x01".into(), gas: "0".into(), gas_used: "0".into(),
+            to: "0x0000000000000000000000000000000000000100".into(), input: "0x".into(), output: "0x".into(), value: "0".into(), error: None,
+            calls: None, call_type: Some("CREATE".into())
+        };
+        let rpc = Arc::new(MockRpc { code: vec![0x63,0x70,0xa0,0x82,0x31,0x00,0x00,0x63,0xa9,0x05,0x9c,0xbb,0x00,0x00,0x00] });
+        let res = extract_contract_creations(rpc, &trace).await.unwrap();
+        assert_eq!(res.len(), 1);
+        assert_eq!(res[0].contract_type, ContractType::Erc20Token);
+        assert_eq!(res[0].call_index, 0);
+    }
+
+    #[test]
+    fn test_determine_contract_type_all_paths() {
+        // ERC20
+        let code = vec![0x63,0x70,0xa0,0x82,0x31,0x00,0x00,0x63,0xa9,0x05,0x9c,0xbb,0x00,0x00];
+        assert_eq!(determine_contract_type(&code).unwrap(), ContractType::Erc20Token);
+        // ERC721
+        let code = vec![0x63,0x6f,0xdd,0x43,0xe1,0x00,0x00,0x63,0x6e,0xb6,0x1d,0x3e,0x00,0x00];
+        assert_eq!(determine_contract_type(&code).unwrap(), ContractType::Erc721Token);
+        // Proxy
+        let code = vec![0x36,0x3d,0x3d,0x37];
+        assert_eq!(determine_contract_type(&code).unwrap(), ContractType::Proxy);
+        // Factory
+        let code = vec![0xf0,0xf5,0xf0];
+        assert_eq!(determine_contract_type(&code).unwrap(), ContractType::Factory);
+        // Unknown
+        let code = vec![0u8];
+        assert_eq!(determine_contract_type(&code).unwrap(), ContractType::Unknown);
+    }
+}
