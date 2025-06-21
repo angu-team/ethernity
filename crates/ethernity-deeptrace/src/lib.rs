@@ -59,33 +59,12 @@ impl Default for TraceAnalysisConfig {
 pub struct PatternDetectionConfig {
     /// Habilita detecção de padrões de token ERC20
     pub detect_erc20: bool,
-    /// Habilita detecção de padrões de token ERC721
-    pub detect_erc721: bool,
-    /// Habilita detecção de padrões de DEX
-    pub detect_dex: bool,
-    /// Habilita detecção de padrões de lending
-    pub detect_lending: bool,
-    /// Habilita detecção de padrões de flash loan
-    pub detect_flash_loan: bool,
-    /// Habilita detecção de padrões de MEV
-    pub detect_mev: bool,
-    /// Habilita detecção de padrões de rug pull
-    pub detect_rug_pull: bool,
-    /// Habilita detecção de padrões de governança
-    pub detect_governance: bool,
 }
 
 impl Default for PatternDetectionConfig {
     fn default() -> Self {
         Self {
             detect_erc20: true,
-            detect_erc721: true,
-            detect_dex: true,
-            detect_lending: true,
-            detect_flash_loan: true,
-            detect_mev: true,
-            detect_rug_pull: true,
-            detect_governance: true,
         }
     }
 }
@@ -110,13 +89,6 @@ impl DeepTraceAnalyzer {
         // Inicializa os detectores de padrões
         let detectors_all: Vec<(bool, Box<dyn PatternDetector>)> = vec![
             (config.pattern_detection.detect_erc20, Box::new(Erc20PatternDetector::new())),
-            (config.pattern_detection.detect_erc721, Box::new(Erc721PatternDetector::new())),
-            (config.pattern_detection.detect_dex, Box::new(DexPatternDetector::new())),
-            (config.pattern_detection.detect_lending, Box::new(LendingPatternDetector::new())),
-            (config.pattern_detection.detect_flash_loan, Box::new(FlashLoanPatternDetector::new())),
-            (config.pattern_detection.detect_mev, Box::new(MevPatternDetector::new())),
-            (config.pattern_detection.detect_rug_pull, Box::new(RugPullPatternDetector::new())),
-            (config.pattern_detection.detect_governance, Box::new(GovernancePatternDetector::new())),
         ];
         
         let pattern_detectors: Vec<Box<dyn PatternDetector>> = detectors_all
@@ -387,16 +359,6 @@ pub struct DetectedPattern {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PatternType {
     Erc20Creation,
-    Erc721Creation,
-    TokenSwap,
-    Liquidity,
-    FlashLoan,
-    Arbitrage,
-    Frontrunning,
-    Backrunning,
-    Sandwich,
-    RugPull,
-    Governance,
     Unknown,
 }
 

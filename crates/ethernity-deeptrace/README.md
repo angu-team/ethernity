@@ -82,27 +82,6 @@ pub struct TraceAnalysisConfig {
 pub struct PatternDetectionConfig {
     /// Habilita detecção de padrões de token ERC20
     pub detect_erc20: bool,
-    
-    /// Habilita detecção de padrões de token ERC721
-    pub detect_erc721: bool,
-    
-    /// Habilita detecção de padrões de DEX
-    pub detect_dex: bool,
-    
-    /// Habilita detecção de padrões de lending
-    pub detect_lending: bool,
-    
-    /// Habilita detecção de padrões de flash loan
-    pub detect_flash_loan: bool,
-    
-    /// Habilita detecção de padrões de MEV
-    pub detect_mev: bool,
-    
-    /// Habilita detecção de padrões de rug pull
-    pub detect_rug_pull: bool,
-    
-    /// Habilita detecção de padrões de governança
-    pub detect_governance: bool,
 }
 ```
 
@@ -137,13 +116,6 @@ let intensive_config = TraceAnalysisConfig {
     enable_parallel: true,
     pattern_detection: PatternDetectionConfig {
         detect_erc20: true,
-        detect_erc721: true,
-        detect_dex: true,
-        detect_lending: true,
-        detect_flash_loan: true,
-        detect_mev: true,
-        detect_rug_pull: true,
-        detect_governance: true,
     },
 };
 
@@ -154,11 +126,7 @@ let fast_config = TraceAnalysisConfig {
     timeout_ms: 5000, // 5 segundos
     enable_cache: false,
     enable_parallel: false,
-    pattern_detection: PatternDetectionConfig {
-        detect_mev: true,
-        detect_rug_pull: true,
-        ..Default::default()
-    },
+    pattern_detection: PatternDetectionConfig { detect_erc20: true },
 };
 
 // Configuração para detecção de segurança
@@ -168,12 +136,7 @@ let security_config = TraceAnalysisConfig {
     timeout_ms: 60000, // 1 minuto
     enable_cache: true,
     enable_parallel: true,
-    pattern_detection: PatternDetectionConfig {
-        detect_mev: true,
-        detect_rug_pull: true,
-        detect_flash_loan: true,
-        ..Default::default()
-    },
+    pattern_detection: PatternDetectionConfig { detect_erc20: true },
 };
 ```
 
@@ -829,22 +792,8 @@ impl SecurityMonitor {
         // Verificar padrões críticos
         for pattern in &analysis.detected_patterns {
             if pattern.confidence >= self.alert_threshold {
-                match pattern.pattern_type {
-                    PatternType::Arbitrage => {
-                        alerts.push(SecurityAlert::MevActivity {
-                            tx_hash,
-                            confidence: pattern.confidence,
-                            addresses: pattern.addresses.clone(),
-                        });
-                    },
-                    PatternType::RugPull => {
-                        alerts.push(SecurityAlert::RugPull {
-                            tx_hash,
-                            confidence: pattern.confidence,
-                            token_address: pattern.addresses.first().copied(),
-                        });
-                    },
-                    _ => {}
+                if let PatternType::Erc20Creation = pattern.pattern_type {
+                    // Nova criação de token detectada
                 }
             }
         }

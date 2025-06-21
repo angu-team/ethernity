@@ -11,19 +11,5 @@ pub trait PatternDetector: Send + Sync {
 }
 
 pub mod erc20;
-pub mod erc721;
-pub mod dex;
-pub mod lending;
-pub mod flash_loan;
-pub mod mev;
-pub mod rug_pull;
-pub mod governance;
 
 pub use erc20::Erc20PatternDetector;
-pub use erc721::Erc721PatternDetector;
-pub use dex::DexPatternDetector;
-pub use lending::LendingPatternDetector;
-pub use flash_loan::FlashLoanPatternDetector;
-pub use mev::MevPatternDetector;
-pub use rug_pull::RugPullPatternDetector;
-pub use governance::GovernancePatternDetector;
