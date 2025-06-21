@@ -13,7 +13,7 @@ async fn analyze_patterns(tx_hash: TransactionHash, rpc: Arc<dyn RpcProvider>) -
     let analyzer = DeepTraceAnalyzer::new(rpc, Some(TraceAnalysisConfig::default()));
 
     // Processa a transação fornecida
-    let result = analyzer.analyze_transaction(tx_hash).await?;
+    let result = analyzer.analyze_transaction(tx_hash).await.expect("ERR");
 
     // Exibe os padrões encontrados de maneira clara
     if result.detected_patterns.is_empty() {
