@@ -71,7 +71,7 @@ impl Default for PatternDetectionConfig {
 pub struct DeepTraceAnalyzer {
     config: TraceAnalysisConfig,
     rpc_client: Arc<dyn ethernity_core::traits::RpcProvider>,
-    memory_manager: Arc<memory::memory::MemoryManager>,
+    memory_manager: Arc<memory::MemoryManager>,
     pattern_detectors: Vec<Box<dyn PatternDetector>>,
 }
 
@@ -82,7 +82,7 @@ impl DeepTraceAnalyzer {
         config: Option<TraceAnalysisConfig>,
     ) -> Self {
         let config = config.unwrap_or_default();
-        let memory_manager = Arc::new(memory::memory::MemoryManager::new());
+        let memory_manager = Arc::new(memory::MemoryManager::new());
 
         // Inicializa os detectores de padrões
         let detectors_all: Vec<(bool, Box<dyn PatternDetector>)> = vec![
@@ -276,7 +276,7 @@ impl DeepTraceAnalyzer {
     }
 
     /// Obtém estatísticas de uso de memória
-    pub fn memory_stats(&self) -> memory::memory::MemoryUsageStats {
+    pub fn memory_stats(&self) -> memory::MemoryUsageStats {
         self.memory_manager.memory_usage()
     }
 }
