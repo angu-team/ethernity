@@ -10,14 +10,12 @@ mod memory;
 mod trace;
 pub mod analyzer;
 mod patterns;
-pub mod detectors;
 mod utils;
 
 use ethereum_types::{Address, H256, U256};
 use std::sync::Arc;
 
 pub use analyzer::*;
-pub use detectors::*;
 // Re-exportações públicas
 pub use memory::*;
 pub use patterns::*;
