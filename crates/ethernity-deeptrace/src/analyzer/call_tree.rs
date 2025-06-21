@@ -51,3 +51,54 @@ fn build_call_tree_recursive(trace: &CallTrace, depth: usize, nodes: &mut Vec<Te
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn basic_trace() -> CallTrace {
+        CallTrace {
+            from: "0x0000000000000000000000000000000000000001".into(),
+            gas: "1".into(),
+            gas_used: "1".into(),
+            to: "0x0000000000000000000000000000000000000002".into(),
+            input: "0x".into(),
+            output: "0x".into(),
+            value: "10".into(),
+            error: None,
+            calls: Some(vec![CallTrace {
+                from: "0x0000000000000000000000000000000000000003".into(),
+                gas: "1".into(),
+                gas_used: "1".into(),
+                to: "0x0000000000000000000000000000000000000004".into(),
+                input: "0x".into(),
+                output: "0x".into(),
+                value: "0".into(),
+                error: None,
+                calls: None,
+                call_type: Some("CALL".into()),
+            }]),
+            call_type: Some("CALL".into()),
+        }
+    }
+
+    #[test]
+    fn test_build_call_tree_basic() {
+        let trace = basic_trace();
+        let tree = build_call_tree(&trace, &TraceAnalysisConfig::default()).unwrap();
+        assert_eq!(tree.root.index, 0);
+        assert_eq!(tree.root.depth, 0);
+        assert_eq!(tree.root.call_type, CallType::Call);
+        assert_eq!(tree.root.children.len(), 0);
+    }
+
+    #[test]
+    fn test_build_call_tree_recursive_depth_limit() {
+        let trace = basic_trace();
+        let mut nodes = Vec::new();
+        let mut cfg = TraceAnalysisConfig::default();
+        cfg.max_depth = 0;
+        build_call_tree_recursive(&trace, 0, &mut nodes, &cfg).unwrap();
+        assert_eq!(nodes.len(), 1);
+    }
+}
