@@ -1,54 +1,8 @@
-use async_trait::async_trait;
+use std::str::FromStr;
 use ethereum_types::{Address, U256};
 use ethernity_core::Error;
-use std::str::FromStr;
+use super::{CallTrace, CallType};
 
-/// Estrutura de trace de chamada
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct CallTrace {
-    pub from: String,
-    pub gas: String,
-    #[serde(rename = "gasUsed")]
-    pub gas_used: String,
-    pub to: String,
-    pub input: String,
-    pub output: String,
-    pub value: String,
-    pub error: Option<String>,
-    pub calls: Option<Vec<CallTrace>>,
-    #[serde(rename = "type")]
-    pub call_type: Option<String>,
-}
-
-/// Tipo de chamada
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CallType {
-    Call,
-    StaticCall,
-    DelegateCall,
-    CallCode,
-    Create,
-    Create2,
-    SelfDestruct,
-    Unknown,
-}
-
-impl From<&str> for CallType {
-    fn from(s: &str) -> Self {
-        match s {
-            "CALL" => CallType::Call,
-            "STATICCALL" => CallType::StaticCall,
-            "DELEGATECALL" => CallType::DelegateCall,
-            "CALLCODE" => CallType::CallCode,
-            "CREATE" => CallType::Create,
-            "CREATE2" => CallType::Create2,
-            "SELFDESTRUCT" => CallType::SelfDestruct,
-            _ => CallType::Unknown,
-        }
-    }
-}
-
-/// Árvore de chamadas
 #[derive(Debug, Clone)]
 pub struct CallTree {
     pub root: CallNode,
@@ -331,9 +285,3 @@ impl CallTree {
     }
 }
 
-/// Detector de padrões em traces
-#[async_trait]
-pub trait TraceDetector: Send + Sync {
-    /// Detecta padrões em um trace
-    async fn detect(&self, trace: &CallTrace) -> Result<Vec<crate::DetectedPattern>, ()>;
-}
