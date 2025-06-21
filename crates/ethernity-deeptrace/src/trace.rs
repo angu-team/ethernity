@@ -265,6 +265,72 @@ impl CallTree {
     }
 }
 
+impl CallTree {
+    /// Obtém todos os nós em uma profundidade específica
+    pub fn nodes_at_depth(&self, depth: usize) -> Vec<&CallNode> {
+        let mut nodes = Vec::new();
+        Self::collect_nodes_at_depth(&self.root, depth, &mut nodes);
+        nodes
+    }
+
+    fn collect_nodes_at_depth<'a>(node: &'a CallNode, target_depth: usize, nodes: &mut Vec<&'a CallNode>) {
+        if node.depth == target_depth {
+            nodes.push(node);
+        }
+        for child in &node.children {
+            Self::collect_nodes_at_depth(child, target_depth, nodes);
+        }
+    }
+
+    /// Obtém todas as chamadas que falharam
+    pub fn failed_calls(&self) -> Vec<&CallNode> {
+        let mut failed = Vec::new();
+        Self::collect_failed_calls(&self.root, &mut failed);
+        failed
+    }
+
+    fn collect_failed_calls<'a>(node: &'a CallNode, failed: &mut Vec<&'a CallNode>) {
+        if node.error.is_some() {
+            failed.push(node);
+        }
+        for child in &node.children {
+            Self::collect_failed_calls(child, failed);
+        }
+    }
+
+    /// Obtém todas as chamadas para um endereço específico
+    pub fn calls_to_address(&self, address: &ethereum_types::Address) -> Vec<&CallNode> {
+        let mut calls = Vec::new();
+        Self::collect_calls_to_address(&self.root, address, &mut calls);
+        calls
+    }
+
+    fn collect_calls_to_address<'a>(node: &'a CallNode, address: &ethereum_types::Address, calls: &mut Vec<&'a CallNode>) {
+        if node.to.map_or(false, |to| to == *address) {
+            calls.push(node);
+        }
+        for child in &node.children {
+            Self::collect_calls_to_address(child, address, calls);
+        }
+    }
+
+    /// Obtém todas as chamadas de um endereço específico
+    pub fn calls_from_address(&self, address: &ethereum_types::Address) -> Vec<&CallNode> {
+        let mut calls = Vec::new();
+        Self::collect_calls_from_address(&self.root, address, &mut calls);
+        calls
+    }
+
+    fn collect_calls_from_address<'a>(node: &'a CallNode, address: &ethereum_types::Address, calls: &mut Vec<&'a CallNode>) {
+        if node.from == *address {
+            calls.push(node);
+        }
+        for child in &node.children {
+            Self::collect_calls_from_address(child, address, calls);
+        }
+    }
+}
+
 /// Detector de padrões em traces
 #[async_trait]
 pub trait TraceDetector: Send + Sync {
