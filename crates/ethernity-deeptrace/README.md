@@ -487,7 +487,7 @@ for anomaly in gas_anomalies {
 ### Monitoramento de Memória
 
 ```rust
-use ethernity_deeptrace::memory::memory::*;
+use ethernity_deeptrace::memory::*;
 
 // Obter estatísticas de memória
 let memory_stats = analyzer.memory_stats();

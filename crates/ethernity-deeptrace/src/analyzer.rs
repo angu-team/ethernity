@@ -4,7 +4,7 @@
  * Analisador principal de traces de transações
  */
 
-use crate::memory::memory::MemoryManager;
+use crate::memory::MemoryManager;
 use crate::{trace::*, ContractCreation, ContractType, ExecutionStep, TokenTransfer, TokenType, TraceAnalysisConfig};
 use ethereum_types::{Address, H256, U256};
 use std::sync::Arc;
