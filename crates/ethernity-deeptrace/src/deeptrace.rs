@@ -218,7 +218,235 @@ impl DeepTraceAnalyzer {
     }
 
     /// Obtém estatísticas de uso de memória
-    pub fn memory_stats(&self) -> memory::MemoryUsageStats {
+pub fn memory_stats(&self) -> memory::MemoryUsageStats {
         self.memory_manager.memory_usage()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_trait::async_trait;
+    use serde_json::json;
+    use crate::{CallNode, CallTree, CallType, PatternType};
+
+    struct MockRpc {
+        trace: Vec<u8>,
+        receipt: Vec<u8>,
+        fail_trace: bool,
+        fail_receipt: bool,
+    }
+
+    #[async_trait]
+    impl ethernity_core::traits::RpcProvider for MockRpc {
+        async fn get_transaction_trace(
+            &self,
+            _tx: ethernity_core::types::TransactionHash,
+        ) -> ethernity_core::error::Result<Vec<u8>> {
+            if self.fail_trace {
+                Err(ethernity_core::Error::Other("fail".into()))
+            } else {
+                Ok(self.trace.clone())
+            }
+        }
+
+        async fn get_transaction_receipt(
+            &self,
+            _tx: ethernity_core::types::TransactionHash,
+        ) -> ethernity_core::error::Result<Vec<u8>> {
+            if self.fail_receipt {
+                Err(ethernity_core::Error::Other("fail".into()))
+            } else {
+                Ok(self.receipt.clone())
+            }
+        }
+
+        async fn get_code(&self, _address: Address) -> ethernity_core::error::Result<Vec<u8>> {
+            Ok(vec![])
+        }
+
+        async fn call(&self, _to: Address, _data: Vec<u8>) -> ethernity_core::error::Result<Vec<u8>> {
+            Ok(vec![])
+        }
+
+        async fn get_block_number(&self) -> ethernity_core::error::Result<u64> {
+            Ok(0)
+        }
+    }
+
+    struct DummyDetector;
+
+    #[async_trait]
+    impl PatternDetector for DummyDetector {
+        fn pattern_type(&self) -> PatternType { PatternType::Unknown }
+
+        async fn detect(&self, _analysis: &TraceAnalysisResult) -> Result<Vec<DetectedPattern>, ()> {
+            Ok(vec![DetectedPattern {
+                pattern_type: PatternType::Unknown,
+                confidence: 1.0,
+                addresses: vec![],
+                data: serde_json::Value::Null,
+                description: "dummy".into(),
+            }])
+        }
+
+        fn min_confidence(&self) -> f64 { 1.0 }
+    }
+
+    fn sample_trace_bytes() -> Vec<u8> {
+        let trace = json!({
+            "from": "0x0000000000000000000000000000000000000001",
+            "gas": "0",
+            "gasUsed": "0",
+            "to": "0x0000000000000000000000000000000000000002",
+            "input": "0x",
+            "output": "0x",
+            "value": "0",
+            "error": null,
+            "calls": null,
+            "type": "CALL"
+        });
+        serde_json::to_vec(&trace).unwrap()
+    }
+
+    fn sample_receipt_bytes() -> Vec<u8> {
+        let receipt = json!({
+            "blockNumber": "0x10",
+            "from": "0x0000000000000000000000000000000000000001",
+            "to": "0x0000000000000000000000000000000000000002",
+            "gasUsed": "0x20",
+            "status": "0x1",
+            "logs": []
+        });
+        serde_json::to_vec(&receipt).unwrap()
+    }
+
+    fn empty_analysis() -> TraceAnalysisResult {
+        TraceAnalysisResult {
+            call_tree: CallTree {
+                root: CallNode {
+                    index: 0,
+                    depth: 0,
+                    call_type: CallType::Call,
+                    from: Address::zero(),
+                    to: None,
+                    value: U256::zero(),
+                    gas: U256::zero(),
+                    gas_used: U256::zero(),
+                    input: Vec::new(),
+                    output: Vec::new(),
+                    error: None,
+                    children: Vec::new(),
+                },
+            },
+            token_transfers: Vec::new(),
+            contract_creations: Vec::new(),
+            execution_path: Vec::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_fetch_and_analyze_transaction() {
+        let rpc = Arc::new(MockRpc {
+            trace: sample_trace_bytes(),
+            receipt: sample_receipt_bytes(),
+            fail_trace: false,
+            fail_receipt: false,
+        });
+        let mut config = TraceAnalysisConfig::default();
+        config.enable_parallel = false;
+        let mut analyzer = DeepTraceAnalyzer::new(rpc, Some(config));
+        analyzer.pattern_detectors = vec![Box::new(DummyDetector)];
+        let res = analyzer.analyze_transaction(H256::zero()).await.unwrap();
+        assert_eq!(res.block_number, 16);
+        assert_eq!(res.from, Address::from_low_u64_be(1));
+        assert_eq!(res.to, Some(Address::from_low_u64_be(2)));
+        assert_eq!(res.gas_used, U256::from(32u64));
+        assert!(res.status);
+        assert_eq!(res.detected_patterns.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_fetch_error_paths() {
+        let rpc = Arc::new(MockRpc { trace: vec![], receipt: vec![], fail_trace: true, fail_receipt: true });
+        let analyzer = DeepTraceAnalyzer::new(rpc, None);
+        assert!(analyzer.fetch_trace(H256::zero()).await.is_err());
+        assert!(analyzer.fetch_receipt(H256::zero()).await.is_err());
+    }
+
+    #[test]
+    fn test_parse_and_build() {
+        let receipt = json!({
+            "blockNumber": "0x1",
+            "from": "0x0000000000000000000000000000000000000003",
+            "gasUsed": "0x5",
+            "status": "0x0"
+        });
+        let (bn, from, to, gas, status) = DeepTraceAnalyzer::parse_receipt_info(&receipt);
+        assert_eq!(bn, 1);
+        assert_eq!(from, Address::from_low_u64_be(3));
+        assert!(to.is_none());
+        assert_eq!(gas, U256::from(5u64));
+        assert!(!status);
+
+        let analysis = empty_analysis();
+        let tx = DeepTraceAnalyzer::build_transaction_analysis(
+            H256::zero(),
+            bn,
+            chrono::Utc::now(),
+            from,
+            to,
+            gas,
+            status,
+            analysis,
+            Vec::new(),
+        );
+        assert_eq!(tx.block_number, 1);
+        assert_eq!(tx.status, false);
+    }
+
+    #[tokio::test]
+    async fn test_detect_patterns_directly() {
+        let rpc = Arc::new(MockRpc { trace: vec![], receipt: vec![], fail_trace: false, fail_receipt: false });
+        let analyzer = DeepTraceAnalyzer {
+            config: TraceAnalysisConfig::default(),
+            rpc_client: rpc,
+            memory_manager: Arc::new(memory::MemoryManager::new()),
+            pattern_detectors: vec![Box::new(DummyDetector)],
+        };
+        let patterns = analyzer.detect_patterns(&empty_analysis()).await.unwrap();
+        assert_eq!(patterns.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_analyze_batch_parallel_and_sequential() {
+        let rpc = Arc::new(MockRpc {
+            trace: sample_trace_bytes(),
+            receipt: sample_receipt_bytes(),
+            fail_trace: false,
+            fail_receipt: false,
+        });
+
+        let mut cfg = TraceAnalysisConfig::default();
+        cfg.enable_parallel = false;
+        let analyzer_seq = DeepTraceAnalyzer::new(rpc.clone(), Some(cfg.clone()));
+        let hashes = vec![H256::zero(), H256::from_low_u64_be(1)];
+        let res = analyzer_seq.analyze_batch(&hashes).await.unwrap();
+        assert_eq!(res.len(), 2);
+
+        cfg.enable_parallel = true;
+        let analyzer_par = DeepTraceAnalyzer::new(rpc, Some(cfg));
+        let res2 = analyzer_par.analyze_batch(&hashes).await.unwrap();
+        assert_eq!(res2.len(), 2);
+    }
+
+    #[test]
+    fn test_new_and_memory_stats() {
+        let mut cfg = TraceAnalysisConfig::default();
+        cfg.pattern_detection.detect_erc20 = false;
+        let analyzer = DeepTraceAnalyzer::new(Arc::new(MockRpc { trace: vec![], receipt: vec![], fail_trace: false, fail_receipt: false }), Some(cfg));
+        assert!(analyzer.pattern_detectors.is_empty());
+        let stats = analyzer.memory_stats();
+        assert!(stats.cache_stats.is_empty());
     }
 }
