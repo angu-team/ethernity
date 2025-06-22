@@ -171,6 +171,19 @@ mod tests {
         assert!(extract_contract_creations(rpc, &trace).await.is_err());
     }
 
+    #[tokio::test]
+    async fn test_extract_contract_creations_zero_address_skips_rpc() {
+        let trace = CallTrace {
+            from: "0x01".into(), gas: "0".into(), gas_used: "0".into(),
+            to: "0x0000000000000000000000000000000000000000".into(), input: "0x".into(), output: "0x".into(), value: "0".into(),
+            error: None, calls: None, call_type: Some("CREATE".into())
+        };
+        let rpc = Arc::new(CountingRpc { code: vec![], calls: Mutex::new(Vec::new()) });
+        let res = extract_contract_creations(rpc.clone(), &trace).await.unwrap();
+        assert!(res.is_empty());
+        assert!(rpc.calls.lock().unwrap().is_empty());
+    }
+
     #[test]
     fn test_determine_contract_type_all_paths() {
         // ERC20

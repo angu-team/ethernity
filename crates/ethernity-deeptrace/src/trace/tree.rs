@@ -285,3 +285,79 @@ impl CallTree {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hex_addr(n: u64) -> String {
+        format!("0x{:040x}", n)
+    }
+
+    fn make_trace() -> CallTrace {
+        CallTrace {
+            from: hex_addr(1),
+            gas: "0".into(),
+            gas_used: "0".into(),
+            to: hex_addr(2),
+            input: "0x".into(),
+            output: "0x".into(),
+            value: "0".into(),
+            error: None,
+            calls: Some(vec![CallTrace{
+                from: hex_addr(1),
+                gas: "0".into(),
+                gas_used: "0".into(),
+                to: hex_addr(3),
+                input: "0x".into(),
+                output: "0x".into(),
+                value: "0".into(),
+                error: Some("err".into()),
+                calls: None,
+                call_type: Some("CALL".into()),
+            }]),
+            call_type: Some("CALL".into()),
+        }
+    }
+
+    #[test]
+    fn test_private_helpers() {
+        let trace = make_trace();
+        let mut idx = 0;
+        let node = CallTree::build_node(&trace, 0, &mut idx).unwrap();
+        let tree = CallTree{root: node};
+
+        let mut pre = Vec::new();
+        tree.traverse_preorder_node(&tree.root, &mut |n| pre.push(n.index));
+        assert_eq!(pre, vec![0,1]);
+
+        let mut post = Vec::new();
+        tree.traverse_postorder_node(&tree.root, &mut |n| post.push(n.index));
+        assert_eq!(post, vec![1,0]);
+
+        assert!(tree.find_by_index_node(&tree.root, 1).is_some());
+        assert!(tree.find_by_index_node(&tree.root, 99).is_none());
+
+        let mut path = Vec::new();
+        assert!(tree.path_to_node_rec(&tree.root, 1, &mut path));
+        assert_eq!(path, vec![0,1]);
+
+        assert_eq!(tree.max_depth_node(&tree.root), 1);
+
+        let mut depth_nodes = Vec::new();
+        CallTree::collect_nodes_at_depth(&tree.root, 1, &mut depth_nodes);
+        assert_eq!(depth_nodes.len(), 1);
+
+        let mut failed = Vec::new();
+        CallTree::collect_failed_calls(&tree.root, &mut failed);
+        assert_eq!(failed.len(), 1);
+
+        let mut to_calls = Vec::new();
+        CallTree::collect_calls_to_address(&tree.root, &Address::from_low_u64_be(3), &mut to_calls);
+        assert_eq!(to_calls.len(), 1);
+
+        let mut from_calls = Vec::new();
+        CallTree::collect_calls_from_address(&tree.root, &Address::from_low_u64_be(1), &mut from_calls);
+        assert_eq!(from_calls.len(), 2);
+    }
+}
+
