@@ -197,4 +197,18 @@ mod tests {
         let receipt = json!({"logs": []});
         assert!(analyzer.analyze(&trace, &receipt).await.is_err());
     }
+
+    #[test]
+    fn test_new_stores_context() {
+        let ctx = AnalysisContext {
+            tx_hash: H256::from_low_u64_be(1),
+            block_number: 1,
+            timestamp: chrono::Utc::now(),
+            rpc_client: Arc::new(MockRpc),
+            memory_manager: Arc::new(MemoryManager::new()),
+            config: TraceAnalysisConfig::default(),
+        };
+        let analyzer = TraceAnalyzer::new(ctx);
+        assert_eq!(analyzer.context.block_number, 1);
+    }
 }

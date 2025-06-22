@@ -480,3 +480,121 @@ pub fn parse_address(hex_addr: &str) -> Address {
 pub fn parse_u256_hex(hex_val: &str) -> U256 {
     U256::from_str_radix(hex_val.trim_start_matches("0x"), 16).unwrap_or_else(|_| U256::zero())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{CallNode, CallTree, CallType, TokenTransfer, TokenType, DetectedPattern, PatternType, ExecutionStep, TransactionAnalysis};
+    use ethereum_types::{Address, H256};
+    use serde_json::json;
+    use chrono::Utc;
+
+    #[test]
+    fn test_bytecode_analysis_and_proxy_detection() {
+        let mut code = vec![
+            0x01, 0x11, 0x21, 0x31, 0x41, 0x51, 0x61, 0x80, 0x90, 0xa0, 0xf4, 0xf1, 0x00,
+        ];
+        code.extend_from_slice(&[0x36, 0x3d, 0x3d, 0x37, 0x3d, 0x3d, 0x3d, 0x36, 0x3d, 0x73]);
+        code.extend_from_slice(&[0x7f, 0x36, 0x08, 0x94, 0xa1, 0x3b, 0xa1, 0xa3, 0x20, 0x6a]);
+
+        let selectors = BytecodeAnalyzer::extract_function_selectors(&[0x63, 1, 2, 3, 4, 0, 0, 0x63, 5, 6, 7, 8, 0, 0]);
+        assert_eq!(selectors, vec![[1,2,3,4],[5,6,7,8]]);
+        assert!(BytecodeAnalyzer::contains_pattern(&[1,2,3,4,5], &[2,3]));
+        assert_eq!(BytecodeAnalyzer::count_opcode(&[0x63,0,0x63], 0x63), 2);
+
+        let complexity = BytecodeAnalyzer::analyze_complexity(&code);
+        assert_eq!(complexity.total_ops, code.len());
+        assert_eq!(complexity.arithmetic_ops, 3); // 0x01, 0x00 and 0x08
+        assert_eq!(complexity.system_ops, 2); // 0xf4 and 0xf1
+
+        assert!(BytecodeAnalyzer::detect_proxy_patterns(&code).contains(&ProxyPattern::MinimalProxy));
+        assert!(BytecodeAnalyzer::detect_proxy_patterns(&code).contains(&ProxyPattern::DelegateCall));
+        assert!(BytecodeAnalyzer::detect_proxy_patterns(&code).contains(&ProxyPattern::UpgradeableProxy));
+
+        // complexity score should be calculable
+        let _score = complexity.complexity_score();
+    }
+
+    #[test]
+    fn test_value_flow_and_suspicious_patterns() {
+        let addr = |n| Address::from_low_u64_be(n);
+        let transfers = vec![
+            TokenTransfer{token_type:TokenType::Erc20, token_address:addr(10), from:addr(1), to:addr(2), amount:U256::from(80u64), token_id:None, call_index:0},
+            TokenTransfer{token_type:TokenType::Erc20, token_address:addr(10), from:addr(3), to:addr(2), amount:U256::from(10u64), token_id:None, call_index:0},
+            TokenTransfer{token_type:TokenType::Erc20, token_address:addr(10), from:addr(2), to:addr(4), amount:U256::from(5u64), token_id:None, call_index:0},
+        ];
+
+        let analysis = ValueFlowAnalyzer::analyze_value_flow(&transfers);
+        assert_eq!(analysis.total_addresses, 4);
+        assert_eq!(analysis.net_receivers.first().unwrap().0, addr(2));
+
+        let patterns = ValueFlowAnalyzer::detect_suspicious_patterns(&analysis);
+        assert!(matches!(patterns[0], SuspiciousPattern::HighConcentration{..}));
+        assert!(patterns.iter().any(|p| matches!(p, SuspiciousPattern::CircularFlow{..})));
+    }
+
+    #[test]
+    fn test_gas_analysis_and_anomalies() {
+        let addr = |n| Address::from_low_u64_be(n);
+        let steps = vec![
+            ExecutionStep{depth:0, call_type:crate::trace::CallType::Call, from:addr(1), to:addr(2), value:U256::zero(), input:vec![], output:vec![], gas_used:U256::from(50_000u64), error:None},
+            ExecutionStep{depth:0, call_type:crate::trace::CallType::DelegateCall, from:addr(1), to:addr(3), value:U256::zero(), input:vec![], output:vec![], gas_used:U256::from(200_000u64), error:None},
+            ExecutionStep{depth:0, call_type:crate::trace::CallType::Create, from:addr(1), to:addr(4), value:U256::zero(), input:vec![], output:vec![], gas_used:U256::from(1_000u64), error:None},
+        ];
+
+        let analysis = GasAnalyzer::analyze_gas_usage(&steps);
+        assert_eq!(analysis.total_gas_used, U256::from(251_000u64));
+        assert_eq!(analysis.expensive_operations.len(), 1);
+
+        let heavy = GasAnalysis {
+            total_gas_used: U256::from(20_000_000u64),
+            call_gas: analysis.call_gas,
+            static_call_gas: analysis.static_call_gas,
+            delegate_call_gas: U256::from(12_000_000u64),
+            create_gas: analysis.create_gas,
+            create2_gas: analysis.create2_gas,
+            operation_count: analysis.operation_count,
+            expensive_operations: vec![analysis.expensive_operations[0].clone(); 11],
+        };
+        let anomalies = GasAnalyzer::detect_gas_anomalies(&heavy);
+        assert_eq!(anomalies.len(), 3);
+    }
+
+    #[test]
+    fn test_display_and_cache_utils_and_parsing() {
+        let addr = Address::from_low_u64_be(1);
+        assert_eq!(DisplayUtils::format_address(&addr), "0x0000000000000000000000000000000000000001");
+        assert_eq!(DisplayUtils::format_gas(&U256::from(2_000_000u64)), "2.00M");
+        assert_eq!(DisplayUtils::format_gas(&U256::from(2_000u64)), "2.00K");
+        assert_eq!(DisplayUtils::format_gas(&U256::from(500u64)), "500");
+
+        let root = CallNode{index:0, depth:0, call_type:CallType::Call, from:addr, to:Some(addr), value:U256::zero(), gas:U256::zero(), gas_used:U256::zero(), input:vec![], output:vec![], error:None, children:vec![]};
+        let analysis = TransactionAnalysis{
+            tx_hash:H256::from_low_u64_be(1),
+            block_number:1,
+            timestamp:Utc::now(),
+            from:addr,
+            to:Some(addr),
+            value:U256::zero(),
+            gas_used:U256::from(1234u64),
+            status:true,
+            call_tree:CallTree{root},
+            token_transfers:vec![],
+            contract_creations:vec![],
+            detected_patterns:vec![DetectedPattern{pattern_type:PatternType::Unknown, confidence:0.9, addresses:vec![], data:json!(null), description:"p".into()}],
+            execution_path:vec![]
+        };
+        let summary = DisplayUtils::create_analysis_summary(&analysis);
+        assert!(summary.contains("Transação: 0x0000000000000000000000000000000000000001"));
+        assert!(summary.contains("Padrões detectados:"));
+
+        let config = crate::TraceAnalysisConfig::default();
+        let h = CacheUtils::calculate_analysis_hash(&analysis.tx_hash, &config);
+        assert!(!h.is_empty());
+        assert!(CacheUtils::should_cache_analysis(&analysis));
+
+        assert_eq!(decode_hex("0x0102"), vec![1u8,2u8]);
+        assert_eq!(parse_address("0x0000000000000000000000000000000000000001"), addr);
+        assert_eq!(parse_u256_hex("0xff"), U256::from(255u64));
+    }
+}

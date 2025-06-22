@@ -86,3 +86,20 @@ where
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn test_zero_capacity_fallback_and_eviction() {
+        let cache = SmartCache::<&'static str, i32>::new(0, Duration::from_millis(10));
+        cache.insert("a", 1);
+        cache.insert("b", 2); // capacity 1 -> evicts "a"
+        assert_eq!(cache.get(&"a"), None);
+        assert_eq!(cache.get(&"b"), Some(2));
+        let stats = cache.stats();
+        assert!(stats.inserts >= 2);
+    }
+}
+
