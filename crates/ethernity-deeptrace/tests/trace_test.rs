@@ -1,5 +1,5 @@
 use ethernity_deeptrace::{CallTrace, CallTree, CallType};
-use ethereum_types::Address;
+use ethereum_types::{Address, U256};
 
 fn mktrace(
     from: &str,
@@ -80,6 +80,45 @@ fn complex_trace() -> CallTrace {
         Some("CALL"),
         None,
         Some(vec![child_with_grand, child]),
+    )
+}
+
+fn default_calltype_trace() -> CallTrace {
+    let grandchild = mktrace(
+        "0000000000000000000000000000000000000003",
+        "0000000000000000000000000000000000000004",
+        "2",
+        "0",
+        "0",
+        "",
+        "",
+        None,
+        Some("fail"),
+        None,
+    );
+    let child = mktrace(
+        "0000000000000000000000000000000000000002",
+        "0000000000000000000000000000000000000003",
+        "1",
+        "0",
+        "0",
+        "",
+        "",
+        None,
+        None,
+        Some(vec![grandchild]),
+    );
+    mktrace(
+        "0000000000000000000000000000000000000001",
+        "",
+        "0",
+        "0",
+        "0",
+        "",
+        "",
+        None,
+        None,
+        Some(vec![child]),
     )
 }
 
@@ -180,5 +219,26 @@ fn test_invalid_input_panic() {
 fn test_invalid_output_panic() {
     let bad = mktrace("0x1", "", "0", "0", "0", "", "0xz", None, None, None);
     CallTree::from_trace(&bad).unwrap();
+}
+
+#[test]
+fn test_default_calltype_and_edges() {
+    let trace = default_calltype_trace();
+    let tree = CallTree::from_trace(&trace).unwrap();
+    assert_eq!(tree.root.call_type, CallType::Call);
+    assert!(tree.root.to.is_none());
+    assert_eq!(tree.max_depth(), 2);
+    assert_eq!(tree.total_calls(), 3);
+    assert_eq!(tree.nodes_at_depth(1).len(), 1);
+    assert_eq!(tree.path_to_node(2), Some(vec![0,1,2]));
+    assert_eq!(tree.failed_calls().len(), 1);
+    assert_eq!(tree.calls_to_address(&Address::from_low_u64_be(3)).len(), 1);
+    assert_eq!(tree.calls_from_address(&Address::from_low_u64_be(2)).len(), 1);
+    let vals: Vec<U256> = tree
+        .filter_nodes(|n| n.value > U256::from(0u8))
+        .into_iter()
+        .map(|n| n.value)
+        .collect();
+    assert_eq!(vals, vec![U256::from(1u8), U256::from(2u8)]);
 }
 
