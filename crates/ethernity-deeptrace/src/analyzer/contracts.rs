@@ -70,6 +70,8 @@ fn determine_contract_type(bytecode: &[u8]) -> Result<ContractType, ()> {
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use std::sync::{Arc, Mutex};
+    use ethernity_core::error::Error;
 
     struct MockRpc { code: Vec<u8> }
 
@@ -78,6 +80,34 @@ mod tests {
         async fn get_transaction_trace(&self, _tx: ethernity_core::types::TransactionHash) -> ethernity_core::error::Result<Vec<u8>> { Ok(vec![]) }
         async fn get_transaction_receipt(&self, _tx: ethernity_core::types::TransactionHash) -> ethernity_core::error::Result<Vec<u8>> { Ok(vec![]) }
         async fn get_code(&self, _address: Address) -> ethernity_core::error::Result<Vec<u8>> { Ok(self.code.clone()) }
+        async fn call(&self, _to: Address, _data: Vec<u8>) -> ethernity_core::error::Result<Vec<u8>> { Ok(vec![]) }
+        async fn get_block_number(&self) -> ethernity_core::error::Result<u64> { Ok(0) }
+    }
+
+    struct CountingRpc {
+        code: Vec<u8>,
+        calls: Mutex<Vec<Address>>, 
+    }
+
+    #[async_trait]
+    impl ethernity_core::traits::RpcProvider for CountingRpc {
+        async fn get_transaction_trace(&self, _tx: ethernity_core::types::TransactionHash) -> ethernity_core::error::Result<Vec<u8>> { Ok(vec![]) }
+        async fn get_transaction_receipt(&self, _tx: ethernity_core::types::TransactionHash) -> ethernity_core::error::Result<Vec<u8>> { Ok(vec![]) }
+        async fn get_code(&self, address: Address) -> ethernity_core::error::Result<Vec<u8>> {
+            self.calls.lock().unwrap().push(address);
+            Ok(self.code.clone())
+        }
+        async fn call(&self, _to: Address, _data: Vec<u8>) -> ethernity_core::error::Result<Vec<u8>> { Ok(vec![]) }
+        async fn get_block_number(&self) -> ethernity_core::error::Result<u64> { Ok(0) }
+    }
+
+    struct ErrorRpc;
+
+    #[async_trait]
+    impl ethernity_core::traits::RpcProvider for ErrorRpc {
+        async fn get_transaction_trace(&self, _tx: ethernity_core::types::TransactionHash) -> ethernity_core::error::Result<Vec<u8>> { Ok(vec![]) }
+        async fn get_transaction_receipt(&self, _tx: ethernity_core::types::TransactionHash) -> ethernity_core::error::Result<Vec<u8>> { Ok(vec![]) }
+        async fn get_code(&self, _address: Address) -> ethernity_core::error::Result<Vec<u8>> { Err(Error::Other("fail".into())) }
         async fn call(&self, _to: Address, _data: Vec<u8>) -> ethernity_core::error::Result<Vec<u8>> { Ok(vec![]) }
         async fn get_block_number(&self) -> ethernity_core::error::Result<u64> { Ok(0) }
     }
@@ -94,6 +124,51 @@ mod tests {
         assert_eq!(res.len(), 1);
         assert_eq!(res[0].contract_type, ContractType::Erc20Token);
         assert_eq!(res[0].call_index, 0);
+    }
+
+    #[tokio::test]
+    async fn test_extract_contract_creations_nested_and_indices() {
+        let child = CallTrace {
+            from: "0x02".into(), gas: "0".into(), gas_used: "0".into(),
+            to: "0x0000000000000000000000000000000000000200".into(), input: "0x".into(), output: "0x".into(), value: "0".into(),
+            error: None, calls: None, call_type: Some("CREATE2".into())
+        };
+        let root = CallTrace {
+            from: "0x01".into(), gas: "0".into(), gas_used: "0".into(),
+            to: "0x0000000000000000000000000000000000000100".into(), input: "0x".into(), output: "0x".into(), value: "0".into(),
+            error: None, calls: Some(vec![child]), call_type: Some("CREATE".into())
+        };
+        let rpc = Arc::new(CountingRpc { code: vec![0x36,0x3d,0x3d,0x37], calls: Mutex::new(Vec::new()) });
+        let res = extract_contract_creations(rpc.clone(), &root).await.unwrap();
+        assert_eq!(res.len(), 2);
+        assert_eq!(res[0].call_index, 0);
+        assert_eq!(res[1].call_index, 1);
+        let calls = rpc.calls.lock().unwrap().clone();
+        assert_eq!(calls.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_extract_contract_creations_non_create_and_zero() {
+        let trace = CallTrace {
+            from: "0x01".into(), gas: "0".into(), gas_used: "0".into(),
+            to: "0x".into(), input: "0x".into(), output: "0x".into(), value: "0".into(),
+            error: None, calls: None, call_type: Some("CALL".into())
+        };
+        let rpc = Arc::new(CountingRpc { code: vec![], calls: Mutex::new(Vec::new()) });
+        let res = extract_contract_creations(rpc.clone(), &trace).await.unwrap();
+        assert!(res.is_empty());
+        assert!(rpc.calls.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_extract_contract_creations_error_propagation() {
+        let trace = CallTrace {
+            from: "0x01".into(), gas: "0".into(), gas_used: "0".into(),
+            to: "0x0000000000000000000000000000000000000100".into(), input: "0x".into(), output: "0x".into(), value: "0".into(),
+            error: None, calls: None, call_type: Some("CREATE".into())
+        };
+        let rpc = Arc::new(ErrorRpc);
+        assert!(extract_contract_creations(rpc, &trace).await.is_err());
     }
 
     #[test]
