@@ -12,6 +12,8 @@ mod state_cache_manager;
 mod attack_detector;
 mod mempool_supervisor;
 mod events;
+mod traits;
+mod rpc_state_provider;
 
 pub use tx_nature_tagger::*;
 pub use tx_aggregator::*;
@@ -20,3 +22,5 @@ pub use state_cache_manager::*;
 pub use attack_detector::*;
 pub use mempool_supervisor::*;
 pub use events::*;
+pub use traits::*;
+pub use rpc_state_provider::*;
