@@ -138,5 +138,23 @@ impl StateImpactEvaluator {
         let ratio = (sqrt_price_x96 * sqrt_price_x96) / 2_f64.powi(192);
         amount_in * ratio
     }
+
+    /// Evaluates groups from [`SnapshotEvent`] and emits [`ImpactEvent`].
+    pub async fn process_stream(
+        mut rx: tokio::sync::mpsc::Receiver<crate::events::SnapshotEvent>,
+        tx: tokio::sync::mpsc::Sender<crate::events::ImpactEvent>,
+    ) {
+        while let Some(ev) = rx.recv().await {
+            if let Some(snapshot) = ev.snapshots.values().next() {
+                let impact = Self::evaluate(&ev.group, &[], snapshot);
+                let _ = tx
+                    .send(crate::events::ImpactEvent {
+                        group: ev.group.clone(),
+                        impact,
+                    })
+                    .await;
+            }
+        }
+    }
 }
 
