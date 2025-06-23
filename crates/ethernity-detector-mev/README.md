@@ -92,6 +92,16 @@ Orquestra todo o ciclo:
 - Regula ingestão de transações
 - Controla janelas de agrupamento
 - Sincroniza blocos com `blockNumber`
+- Atua como **FSM assíncrona** guiada por eventos `SupervisorEvent`
+
+```rust
+enum SupervisorEvent {
+    NewTxObserved(Tx),
+    BlockAdvanced(BlockMetadata),
+    StateRefreshed(String),
+    GroupFinalized(String),
+}
+```
 
   → Garante consistência temporal e coordenação entre os módulos.
 
