@@ -57,10 +57,49 @@ pub struct GroupImpact {
 }
 
 #[derive(Debug, Clone, Copy)]
+use std::sync::Arc;
+
+pub trait CurveModel: Send + Sync {
+    fn expected_out(&self, amount_in: f64, snapshot: &StateSnapshot) -> f64;
+    fn apply_trade(&self, amount_in: f64, snapshot: &mut StateSnapshot) {
+        let out = self.expected_out(amount_in, snapshot);
+        snapshot.reserve_in += amount_in;
+        snapshot.reserve_out -= out;
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct ConstantProductCurve;
+
+impl CurveModel for ConstantProductCurve {
+    fn expected_out(&self, amount_in: f64, snapshot: &StateSnapshot) -> f64 {
+        StateImpactEvaluator::expected_out_v2(amount_in, snapshot.reserve_in, snapshot.reserve_out)
+    }
+
+    fn apply_trade(&self, amount_in: f64, snapshot: &mut StateSnapshot) {
+        let out = self.expected_out(amount_in, snapshot);
+        snapshot.reserve_in += amount_in;
+        snapshot.reserve_out -= out;
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct UniswapV3Curve;
+
+impl CurveModel for UniswapV3Curve {
+    fn expected_out(&self, amount_in: f64, snapshot: &StateSnapshot) -> f64 {
+        let sp = snapshot.sqrt_price_x96.unwrap_or(0.0);
+        StateImpactEvaluator::expected_out_v3(amount_in, sp)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct ImpactModelParams {
     pub liquidity: f64,
     pub slippage_curve: f64,
     pub convexity: f64,
+    pub curve_model: Arc<dyn CurveModel>,
+    pub lightweight_simulation: bool,
 }
 
 impl Default for ImpactModelParams {
@@ -69,23 +108,51 @@ impl Default for ImpactModelParams {
             liquidity: 1.0,
             slippage_curve: 3.0,
             convexity: 0.5,
+            curve_model: Arc::new(ConstantProductCurve),
+            lightweight_simulation: false,
         }
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct SlippageHistory {
+    window: usize,
+    values: Vec<f64>,
+}
+
+impl SlippageHistory {
+    pub fn new(window: usize) -> Self {
+        Self { window, values: Vec::new() }
+    }
+
+    pub fn record(&mut self, v: f64) {
+        self.values.push(v);
+        if self.values.len() > self.window {
+            self.values.remove(0);
+        }
+    }
+
+    pub fn average(&self) -> f64 {
+        if self.values.is_empty() { 0.0 } else { self.values.iter().sum::<f64>() / self.values.len() as f64 }
+    }
+
+    pub fn is_empty(&self) -> bool { self.values.is_empty() }
+}
+
 pub struct StateImpactEvaluator {
     params: ImpactModelParams,
+    slippage_history: SlippageHistory,
 }
 
 impl Default for StateImpactEvaluator {
     fn default() -> Self {
-        Self { params: ImpactModelParams::default() }
+        Self { params: ImpactModelParams::default(), slippage_history: SlippageHistory::new(10) }
     }
 }
 
 impl StateImpactEvaluator {
     pub fn new(params: ImpactModelParams) -> Self {
-        Self { params }
+        Self { params, slippage_history: SlippageHistory::new(10) }
     }
 
     pub fn evaluate(group: &TxGroup, victims: &[VictimInput], snapshot: &StateSnapshot) -> GroupImpact {
@@ -98,18 +165,21 @@ impl StateImpactEvaluator {
         let mut expected_profit = 0.0;
         let mut prev_slippage: Option<f64> = None;
         let mut convexity_integrity_score = 1.0;
+        let mut snapshot_local = snapshot.clone();
 
         for v in victims {
             let expected = match pool_type {
-                PoolType::V2 | PoolType::Unknown => Self::expected_out_v2(v.amount_in, snapshot.reserve_in, snapshot.reserve_out),
-                PoolType::V3 => {
-                    let sp = snapshot.sqrt_price_x96.unwrap_or(0.0);
-                    Self::expected_out_v3(v.amount_in, sp)
-                },
-                PoolType::Lending => Self::expected_out_v2(v.amount_in, snapshot.reserve_in, snapshot.reserve_out),
+                PoolType::V2 | PoolType::Unknown => self.params.curve_model.expected_out(v.amount_in, &snapshot_local),
+                PoolType::V3 => self.params.curve_model.expected_out(v.amount_in, &snapshot_local),
+                PoolType::Lending => self.params.curve_model.expected_out(v.amount_in, &snapshot_local),
             };
             let slippage_tolerated = if expected > 0.0 { ((expected - v.amount_out_min) / expected) * 100.0 } else { 0.0 };
-            let slippage_baseline = self.params.slippage_curve;
+            let baseline_dynamic = if self.slippage_history.is_empty() {
+                self.params.slippage_curve
+            } else {
+                self.slippage_history.average()
+            };
+            let slippage_baseline = baseline_dynamic;
             let slippage_adjusted = (slippage_tolerated + slippage_baseline) / 2.0;
             if let Some(prev) = prev_slippage {
                 let delta = slippage_tolerated - prev;
@@ -118,6 +188,7 @@ impl StateImpactEvaluator {
                 }
             }
             prev_slippage = Some(slippage_tolerated);
+            self.slippage_history.record(slippage_tolerated);
             expected_profit += expected - v.amount_out_min;
             impacts.push(VictimImpact {
                 tx_hash: v.tx_hash,
@@ -129,6 +200,9 @@ impl StateImpactEvaluator {
                 slippage_adjusted,
                 token_behavior_unknown: v.token_behavior_unknown,
             });
+            if self.params.lightweight_simulation {
+                self.params.curve_model.apply_trade(v.amount_in, &mut snapshot_local);
+            }
         }
 
         let mut state_confidence = 1.0;
