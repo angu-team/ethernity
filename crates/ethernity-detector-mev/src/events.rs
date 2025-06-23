@@ -2,7 +2,7 @@ use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use ethereum_types::Address;
 use ethernity_core::types::TransactionHash;
-use crate::{TxGroup, StateSnapshot, GroupImpact, AttackReport};
+use crate::{TxGroup, StateSnapshot, GroupImpact, AttackVerdict};
 use tokio::sync::mpsc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,7 +29,7 @@ pub struct ImpactEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThreatEvent {
-    pub report: AttackReport,
+    pub verdict: AttackVerdict,
 }
 
 /// Simple event bus wrapper over [`tokio::sync::mpsc`] channels.

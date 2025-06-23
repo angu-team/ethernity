@@ -4,25 +4,21 @@ use ethereum_types::H256;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum DetectedAttackType {
-    Frontrun,
-    Sandwich,
-    Spoof,
-    Backrun,
+pub enum AttackType {
+    Frontrun { justification: String },
+    Sandwich { justification: String },
+    Spoof { justification: String },
+    Backrun { justification: String },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct AttackReport {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttackVerdict {
     pub group_key: H256,
-    pub attack_detected: bool,
-    pub attack_type: Option<DetectedAttackType>,
-    pub attack_confidence: f64,
-    pub dominance_score: Option<f64>,
-    pub convexity_integrity_score: Option<f64>,
-    pub entropy_tolerance_window: u64,
-    pub participants: Vec<TransactionHash>,
-    pub reason: Option<String>,
+    pub attack_type: Option<AttackType>,
+    pub confidence: f64,
+    pub reconsiderable: bool,
 }
+
 
 pub struct AttackDetector {
     base_fee: f64,
@@ -41,7 +37,7 @@ impl AttackDetector {
         max_priority.min(eff)
     }
 
-    pub fn analyze_group(&self, group: &TxGroup) -> Option<AttackReport> {
+    pub fn analyze_group(&self, group: &TxGroup) -> Option<AttackVerdict> {
         if group.txs.len() < 2 {
             return None;
         }
@@ -52,70 +48,40 @@ impl AttackDetector {
             .collect();
         txs.sort_by_key(|(t, _)| t.first_seen);
 
-        if let Some((p, dom)) = self.detect_sandwich(&txs) {
-            return Some(AttackReport {
+        if let Some((_, dom)) = self.detect_sandwich(&txs) {
+            return Some(AttackVerdict {
                 group_key: group.group_key,
-                attack_detected: true,
-                attack_type: Some(DetectedAttackType::Sandwich),
-                attack_confidence: 0.91,
-                dominance_score: Some(dom),
-                convexity_integrity_score: Some(0.78),
-                entropy_tolerance_window: self.entropy_tolerance_window as u64,
-                participants: p,
-                reason: None,
+                attack_type: Some(AttackType::Sandwich { justification: "sandwich pattern".to_string() }),
+                confidence: 0.91,
+                reconsiderable: 0.91 < 0.8,
             });
         }
 
-        if let Some((p, dom)) = self.detect_frontrun(&txs) {
+        if let Some((_p, dom)) = self.detect_frontrun(&txs) {
             let conf = if dom >= 0.9 { 0.93 } else { dom };
-            return Some(AttackReport {
+            return Some(AttackVerdict {
                 group_key: group.group_key,
-                attack_detected: true,
-                attack_type: Some(DetectedAttackType::Frontrun),
-                attack_confidence: conf,
-                dominance_score: Some(dom),
-                convexity_integrity_score: None,
-                entropy_tolerance_window: self.entropy_tolerance_window,
-                participants: p,
-                reason: None,
+                attack_type: Some(AttackType::Frontrun { justification: format!("priority dominance {:.2}", dom) }),
+                confidence: conf,
+                reconsiderable: conf < 0.8,
             });
         }
 
-        if let Some((p, score)) = self.detect_spoof(&txs) {
-            let conf = if score >= 0.8 { score } else { score };
-            let mut report = AttackReport {
+        if let Some((_p, score)) = self.detect_spoof(&txs) {
+            return Some(AttackVerdict {
                 group_key: group.group_key,
-                attack_detected: score >= 0.8,
-                attack_type: Some(DetectedAttackType::Spoof),
-                attack_confidence: score,
-                dominance_score: None,
-                convexity_integrity_score: None,
-                entropy_tolerance_window: self.entropy_tolerance_window,
-                participants: p,
-                reason: None,
-            };
-            if report.attack_confidence < 0.6 {
-                report.attack_detected = false;
-                report.reason = Some("low-confidence signature".to_string());
-            }
-            return Some(report);
+                attack_type: Some(AttackType::Spoof { justification: "suspicious gas pattern".to_string() }),
+                confidence: score,
+                reconsiderable: score < 0.8,
+            });
         }
 
-        if let Some((p, conf)) = self.detect_backrun(&txs) {
-            return Some(AttackReport {
+        if let Some((_p, conf)) = self.detect_backrun(&txs) {
+            return Some(AttackVerdict {
                 group_key: group.group_key,
-                attack_detected: conf >= 0.6,
-                attack_type: Some(DetectedAttackType::Backrun),
-                attack_confidence: conf,
-                dominance_score: None,
-                convexity_integrity_score: None,
-                entropy_tolerance_window: self.entropy_tolerance_window,
-                participants: p,
-                reason: if conf < 0.6 {
-                    Some("low-confidence signature".to_string())
-                } else {
-                    None
-                },
+                attack_type: Some(AttackType::Backrun { justification: "backrun sequence".to_string() }),
+                confidence: conf,
+                reconsiderable: conf < 0.8,
             });
         }
 
@@ -210,8 +176,8 @@ impl AttackDetector {
         tx: tokio::sync::mpsc::Sender<crate::events::ThreatEvent>,
     ) {
         while let Some(ev) = rx.recv().await {
-            if let Some(report) = self.analyze_group(&ev.group) {
-                let _ = tx.send(crate::events::ThreatEvent { report }).await;
+            if let Some(verdict) = self.analyze_group(&ev.group) {
+                let _ = tx.send(crate::events::ThreatEvent { verdict }).await;
             }
         }
     }
