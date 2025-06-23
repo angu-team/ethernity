@@ -229,3 +229,72 @@ impl<P: RpcProvider + Clone> MempoolSupervisor<P> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+use async_trait::async_trait;
+use std::sync::{Arc,Mutex};
+    use ethereum_types::{H256, Address};
+    #[derive(Clone, Default)]
+    struct DummyProvider { block: Arc<Mutex<u64>> }
+
+    #[async_trait]
+    impl RpcProvider for DummyProvider {
+        async fn get_transaction_trace(&self, _tx_hash: TransactionHash) -> Result<Vec<u8>> { Ok(vec![]) }
+        async fn get_transaction_receipt(&self, _tx_hash: TransactionHash) -> Result<Vec<u8>> { Ok(vec![]) }
+        async fn get_code(&self, _address: Address) -> Result<Vec<u8>> { Ok(vec![]) }
+        async fn call(&self, _to: Address, _data: Vec<u8>) -> Result<Vec<u8>> { Ok(vec![]) }
+        async fn get_block_number(&self) -> Result<u64> { Ok(*self.block.lock().unwrap()) }
+        async fn get_block_hash(&self, _block_number: u64) -> Result<H256> { Ok(H256::zero()) }
+    }
+
+    fn dummy_group(times: &[u64]) -> TxGroup {
+        let txs = times.iter().enumerate().map(|(i, t)| AnnotatedTx {
+            tx_hash: H256::repeat_byte(i as u8),
+            token_paths: vec![],
+            targets: vec![],
+            tags: vec![],
+            first_seen: *t,
+            gas_price: 1.0,
+            max_priority_fee_per_gas: None,
+            confidence: 1.0,
+        }).collect::<Vec<_>>();
+        TxGroup {
+            group_key: H256::zero(),
+            token_paths: vec![],
+            targets: vec![],
+            txs,
+            block_number: None,
+            direction_signature: String::new(),
+            ordering_certainty_score: 1.0,
+            reorderable: false,
+            contaminated: false,
+            window_start: 0,
+        }
+    }
+
+    #[test]
+    fn state_alignment_values() {
+        let provider = DummyProvider::default();
+        let sup = MempoolSupervisor::new(provider, 1, Duration::from_secs(1), 10);
+        let mut g = dummy_group(&[]);
+        g.block_number = Some(5);
+        assert_eq!(sup.compute_state_alignment(&g, 5), 1.0);
+        assert_eq!(sup.compute_state_alignment(&g, 4), 1.0);
+        assert_eq!(sup.compute_state_alignment(&g, 7), 0.5);
+        g.block_number = None;
+        assert_eq!(sup.compute_state_alignment(&g, 7), 0.8);
+    }
+
+    #[test]
+    fn jitter_calculation() {
+        let provider = DummyProvider::default();
+        let sup = MempoolSupervisor::new(provider, 1, Duration::from_secs(1), 10);
+        let g = dummy_group(&[1,2,3]);
+        let j = sup.compute_jitter(&g);
+        assert!(j > 0.0);
+        let g2 = dummy_group(&[1]);
+        assert_eq!(sup.compute_jitter(&g2), 0.0);
+    }
+}
