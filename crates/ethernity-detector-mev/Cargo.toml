@@ -15,6 +15,7 @@ ethers = { workspace = true }
 ethereum-types = { workspace = true }
 tiny-keccak = { version = "2.0", features = ["keccak"] }
 serde = { workspace = true, features = ["derive"] }
+chrono = { workspace = true }
 
 [dev-dependencies]
 hex = "0.4"

@@ -1,4 +1,4 @@
-use crate::tx_aggregator::{AnnotatedTx, TxGroup};
+use crate::tx_aggregator::TxGroup;
 use ethernity_core::types::TransactionHash;
 use ethereum_types::{Address, H256};
 use serde::{Deserialize, Serialize};
