@@ -171,5 +171,29 @@ impl<P: RpcProvider> StateCacheManager<P> {
         let c = self.cache.lock();
         c.get(&(target, block_number, profile)).map(|e| e.snapshot.clone())
     }
+
+    /// Processes [`TxGroup`] events, performs state snapshot and emits [`SnapshotEvent`].
+    pub async fn process_stream(
+        &self,
+        mut rx: tokio::sync::mpsc::Receiver<TxGroup>,
+        tx: tokio::sync::mpsc::Sender<crate::events::SnapshotEvent>,
+        profile: SnapshotProfile,
+    ) {
+        while let Some(group) = rx.recv().await {
+            let block = self.provider.get_block_number().await.unwrap_or(0);
+            let mut map = HashMap::new();
+            let mut gmap = HashMap::new();
+            gmap.insert(group.group_key, group.clone());
+            if self.snapshot_groups(&gmap, block, profile).await.is_ok() {
+                for t in &group.targets {
+                    if let Some(s) = self.get_state(*t, block, profile) {
+                        map.insert(*t, s);
+                    }
+                }
+            }
+            let ev = crate::events::SnapshotEvent { group, snapshots: map };
+            let _ = tx.send(ev).await;
+        }
+    }
 }
 

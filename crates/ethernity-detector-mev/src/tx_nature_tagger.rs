@@ -4,9 +4,10 @@ use lru::LruCache;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
+use serde::{Serialize, Deserialize};
 
 /// Componentes que contribuem para o cálculo de confiança.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ConfidenceComponents {
     pub abi_match: f64,
     pub structure: f64,
@@ -14,7 +15,7 @@ pub struct ConfidenceComponents {
 }
 
 /// Resultado da inferência da natureza da transação.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TxNature {
     pub tx_hash: TransactionHash,
     pub tags: Vec<String>,
@@ -146,6 +147,29 @@ impl<P: RpcProvider + Send + Sync> TxNatureTagger<P> {
             cache.put(address, code.clone());
         }
         Ok(code)
+    }
+
+    /// Consumes a stream of [`RawTx`] events and emits [`AnnotatedTx`].
+    pub async fn process_stream(
+        &self,
+        mut rx: tokio::sync::mpsc::Receiver<crate::events::RawTx>,
+        tx: tokio::sync::mpsc::Sender<crate::AnnotatedTx>,
+    ) {
+        while let Some(raw) = rx.recv().await {
+            if let Ok(res) = self.analyze(raw.to, &raw.input, raw.tx_hash).await {
+                let annotated = crate::AnnotatedTx {
+                    tx_hash: raw.tx_hash,
+                    token_paths: res.token_paths,
+                    targets: res.targets,
+                    tags: res.tags,
+                    first_seen: raw.first_seen,
+                    gas_price: raw.gas_price,
+                    max_priority_fee_per_gas: raw.max_priority_fee_per_gas,
+                    confidence: res.confidence,
+                };
+                let _ = tx.send(annotated).await;
+            }
+        }
     }
 }
 

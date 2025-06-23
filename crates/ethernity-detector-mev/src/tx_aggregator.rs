@@ -163,5 +163,20 @@ impl TxAggregator {
             / group.txs.len() as f64;
         var.sqrt() > 0.2
     }
+
+    /// Consumes annotated transactions and emits updated groups.
+    pub async fn process_stream(
+        mut self,
+        mut rx: tokio::sync::mpsc::Receiver<AnnotatedTx>,
+        tx: tokio::sync::mpsc::Sender<TxGroup>,
+    ) {
+        while let Some(txn) = rx.recv().await {
+            if let Some(key) = self.add_tx(txn) {
+                if let Some(g) = self.groups.get(&key) {
+                    let _ = tx.send(g.clone()).await;
+                }
+            }
+        }
+    }
 }
 

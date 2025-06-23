@@ -202,6 +202,19 @@ impl AttackDetector {
         }
         None
     }
+
+    /// Consumes [`ImpactEvent`]s and emits [`ThreatEvent`].
+    pub async fn process_stream(
+        &self,
+        mut rx: tokio::sync::mpsc::Receiver<crate::events::ImpactEvent>,
+        tx: tokio::sync::mpsc::Sender<crate::events::ThreatEvent>,
+    ) {
+        while let Some(ev) = rx.recv().await {
+            if let Some(report) = self.analyze_group(&ev.group) {
+                let _ = tx.send(crate::events::ThreatEvent { report }).await;
+            }
+        }
+    }
 }
 
 
