@@ -7,6 +7,8 @@
 
 mod tx_nature_tagger;
 mod tx_aggregator;
+mod state_impact_evaluator;
 
 pub use tx_nature_tagger::*;
 pub use tx_aggregator::*;
+pub use state_impact_evaluator::*;
