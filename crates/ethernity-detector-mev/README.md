@@ -45,15 +45,15 @@ Agrupa transações anotadas por `token_paths` + `targets`, formando:
 
 ---
 
-### 3. **StateCacheManager**
+### 3. **StateSnapshotRepository**
 
-Gerencia snapshots on-chain:
+Cache persistente de snapshots:
 
-- Coleta `reserves`, `slot0`, `liquidity` por `target`
-- Indexa por `blockNumber`
-- Evita chamadas redundantes
+- Armazena em RocksDB por `(contract_address, block_number)`
+- Valida `block_hash` para lidar com forks
+- Evita recomputações redundantes
 
-  → Fornece estado consistente para todos os grupos avaliados.
+  → Fornece estado consistente com a cadeia vigente.
 
 
 ---

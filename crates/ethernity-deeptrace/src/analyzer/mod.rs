@@ -76,6 +76,7 @@ mod tests {
         async fn get_code(&self, _address: ethereum_types::Address) -> ethernity_core::error::Result<Vec<u8>> { Ok(vec![0u8]) }
         async fn call(&self, _to: ethereum_types::Address, _data: Vec<u8>) -> ethernity_core::error::Result<Vec<u8>> { Ok(vec![]) }
         async fn get_block_number(&self) -> ethernity_core::error::Result<u64> { Ok(0) }
+        async fn get_block_hash(&self, _block_number: u64) -> ethernity_core::error::Result<ethereum_types::H256> { Ok(ethereum_types::H256::zero()) }
     }
 
     fn simple_trace() -> CallTrace {
@@ -116,6 +117,7 @@ mod tests {
         }
         async fn call(&self, _to: ethereum_types::Address, _data: Vec<u8>) -> ethernity_core::error::Result<Vec<u8>> { Ok(vec![]) }
         async fn get_block_number(&self) -> ethernity_core::error::Result<u64> { Ok(0) }
+        async fn get_block_hash(&self, _block_number: u64) -> ethernity_core::error::Result<ethereum_types::H256> { Ok(ethereum_types::H256::zero()) }
     }
 
     struct MockRpcFail;
@@ -129,6 +131,7 @@ mod tests {
         }
         async fn call(&self, _to: ethereum_types::Address, _data: Vec<u8>) -> ethernity_core::error::Result<Vec<u8>> { Ok(vec![]) }
         async fn get_block_number(&self) -> ethernity_core::error::Result<u64> { Ok(0) }
+        async fn get_block_hash(&self, _block_number: u64) -> ethernity_core::error::Result<ethereum_types::H256> { Ok(ethereum_types::H256::zero()) }
     }
 
     fn creation_trace() -> CallTrace {

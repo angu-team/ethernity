@@ -6,6 +6,7 @@
 
 use ethernity_core::{Error, error::Result, types::*};
 use ethereum_types::Address;
+use ethereum_types::H256;
 use web3::{
     Web3, Transport,
     transports::{Http, WebSocket},
@@ -283,6 +284,15 @@ impl EthernityRpcClient {
         Ok(block_number.as_u64())
     }
 
+    /// Obtém o hash de um bloco específico
+    pub async fn get_block_hash(&self, block_number: u64) -> Result<H256> {
+        let bytes = self.get_block(block_number).await?;
+        let block: web3::types::Block<Web3H256> = serde_json::from_slice(&bytes)
+            .map_err(|e| Error::DecodeError(format!("Falha ao decodificar bloco: {}", e)))?;
+        let hash = block.hash.ok_or_else(|| Error::NotFound("Hash não encontrado".to_string()))?;
+        Ok(H256::from_slice(hash.as_bytes()))
+    }
+
     /// Obtém o código de um contrato
     pub async fn get_code(&self, address: Address) -> Result<Vec<u8>> {
         let result = match &self.transport {
@@ -388,6 +398,10 @@ impl ethernity_core::traits::RpcProvider for EthernityRpcClient {
     async fn get_block_number(&self) -> Result<u64> {
         self.get_block_number().await
     }
+
+    async fn get_block_hash(&self, block_number: u64) -> Result<H256> {
+        self.get_block_hash(block_number).await
+    }
 }
 
 /// Estatísticas do cache
@@ -481,6 +495,11 @@ impl ethernity_core::traits::RpcProvider for LoadBalancedRpcClient {
     async fn get_block_number(&self) -> Result<u64> {
         let client = self.pool.get_client();
         client.get_block_number().await
+    }
+
+    async fn get_block_hash(&self, block_number: u64) -> Result<H256> {
+        let client = self.pool.get_client();
+        client.get_block_hash(block_number).await
     }
 }
 

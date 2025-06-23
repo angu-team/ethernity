@@ -1,6 +1,6 @@
 use crate::{
     tx_aggregator::{AnnotatedTx, TxAggregator, TxGroup},
-    state_cache_manager::{SnapshotProfile, StateCacheManager},
+    state_snapshot_repository::{SnapshotProfile, StateSnapshotRepository},
     tx_nature_tagger::TxNatureTagger,
 };
 use dashmap::DashMap;
@@ -40,7 +40,7 @@ pub struct GroupReady {
 pub struct MempoolSupervisor<P> {
     provider: P,
     tagger: TxNatureTagger<P>,
-    state_manager: StateCacheManager<P>,
+    state_manager: StateSnapshotRepository<P>,
     aggregator: TxAggregator,
     buffer: DashMap<TransactionHash, BufferedTx>,
     min_tx_count: usize,
@@ -58,7 +58,7 @@ impl<P: RpcProvider + Clone> MempoolSupervisor<P> {
     pub fn new(provider: P, min_tx_count: usize, dt_max: Duration, max_active_groups: usize) -> Self {
         Self {
             tagger: TxNatureTagger::new(provider.clone()),
-            state_manager: StateCacheManager::new(provider.clone()),
+            state_manager: StateSnapshotRepository::open(provider.clone(), "snapshot_db").expect("db"),
             aggregator: TxAggregator::new(),
             buffer: DashMap::new(),
             provider,

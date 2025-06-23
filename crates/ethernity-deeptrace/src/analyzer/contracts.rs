@@ -82,6 +82,7 @@ mod tests {
         async fn get_code(&self, _address: Address) -> ethernity_core::error::Result<Vec<u8>> { Ok(self.code.clone()) }
         async fn call(&self, _to: Address, _data: Vec<u8>) -> ethernity_core::error::Result<Vec<u8>> { Ok(vec![]) }
         async fn get_block_number(&self) -> ethernity_core::error::Result<u64> { Ok(0) }
+        async fn get_block_hash(&self, _block_number: u64) -> ethernity_core::error::Result<ethereum_types::H256> { Ok(ethereum_types::H256::zero()) }
     }
 
     struct CountingRpc {
@@ -99,6 +100,7 @@ mod tests {
         }
         async fn call(&self, _to: Address, _data: Vec<u8>) -> ethernity_core::error::Result<Vec<u8>> { Ok(vec![]) }
         async fn get_block_number(&self) -> ethernity_core::error::Result<u64> { Ok(0) }
+        async fn get_block_hash(&self, _block_number: u64) -> ethernity_core::error::Result<ethereum_types::H256> { Ok(ethereum_types::H256::zero()) }
     }
 
     struct ErrorRpc;
@@ -110,6 +112,7 @@ mod tests {
         async fn get_code(&self, _address: Address) -> ethernity_core::error::Result<Vec<u8>> { Err(Error::Other("fail".into())) }
         async fn call(&self, _to: Address, _data: Vec<u8>) -> ethernity_core::error::Result<Vec<u8>> { Ok(vec![]) }
         async fn get_block_number(&self) -> ethernity_core::error::Result<u64> { Ok(0) }
+        async fn get_block_hash(&self, _block_number: u64) -> ethernity_core::error::Result<ethereum_types::H256> { Ok(ethereum_types::H256::zero()) }
     }
 
     #[tokio::test]
