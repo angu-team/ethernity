@@ -1,4 +1,4 @@
-use ethernity_detector_mev::{AnnotatedTx, TxAggregator, AttackDetector, DetectedAttackType};
+use ethernity_detector_mev::{AnnotatedTx, TxAggregator, AttackDetector, AttackType};
 use ethereum_types::{Address, H256};
 
 #[test]
@@ -26,7 +26,10 @@ fn detect_basic_frontrun() {
     let group = aggr.groups().values().next().unwrap();
     let detector = AttackDetector::new(1.0, 10);
     let res = detector.analyze_group(group).expect("should detect");
-    assert_eq!(res.attack_type, Some(DetectedAttackType::Frontrun));
+    match res.attack_type {
+        Some(AttackType::Frontrun { .. }) => {}
+        _ => panic!("expected frontrun"),
+    }
 }
 
 #[test]
@@ -56,7 +59,10 @@ fn detect_basic_sandwich() {
     let group = aggr.groups().values().next().unwrap();
     let detector = AttackDetector::new(1.0, 10);
     let res = detector.analyze_group(group).expect("should detect");
-    assert_eq!(res.attack_type, Some(DetectedAttackType::Sandwich));
+    match res.attack_type {
+        Some(AttackType::Sandwich { .. }) => {}
+        _ => panic!("expected sandwich"),
+    }
 }
 
 
