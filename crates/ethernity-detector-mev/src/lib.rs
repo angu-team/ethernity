@@ -6,5 +6,7 @@
  */
 
 mod tx_nature_tagger;
+mod tx_aggregator;
 
 pub use tx_nature_tagger::*;
+pub use tx_aggregator::*;
