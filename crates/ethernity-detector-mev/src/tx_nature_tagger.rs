@@ -4,6 +4,7 @@ use lru::LruCache;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
+use crate::traits::{TransactionClassifier, TagPrediction};
 use serde::{Serialize, Deserialize};
 
 /// Componentes que contribuem para o cálculo de confiança.
@@ -170,6 +171,29 @@ impl<P: RpcProvider + Send + Sync> TxNatureTagger<P> {
                 let _ = tx.send(annotated).await;
             }
         }
+    }
+}
+
+#[async_trait::async_trait]
+impl<P> TransactionClassifier for TxNatureTagger<P>
+where
+    P: RpcProvider + Send + Sync,
+{
+    async fn classify(
+        &self,
+        to: Address,
+        input: &[u8],
+        tx_hash: TransactionHash,
+    ) -> Result<Vec<TagPrediction>> {
+        let res = self.analyze(to, input, tx_hash).await?;
+        Ok(res
+            .tags
+            .into_iter()
+            .map(|tag| TagPrediction {
+                tag,
+                confidence: res.confidence,
+            })
+            .collect())
     }
 }
 

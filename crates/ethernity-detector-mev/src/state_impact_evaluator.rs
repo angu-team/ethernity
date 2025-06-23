@@ -1,4 +1,5 @@
 use crate::tx_aggregator::TxGroup;
+use crate::traits::ImpactModel;
 use ethernity_core::types::TransactionHash;
 use ethereum_types::{Address, H256};
 use serde::{Deserialize, Serialize};
@@ -55,10 +56,43 @@ pub struct GroupImpact {
     pub reorg_risk_level: String,
 }
 
-pub struct StateImpactEvaluator;
+#[derive(Debug, Clone, Copy)]
+pub struct ImpactModelParams {
+    pub liquidity: f64,
+    pub slippage_curve: f64,
+    pub convexity: f64,
+}
+
+impl Default for ImpactModelParams {
+    fn default() -> Self {
+        Self {
+            liquidity: 1.0,
+            slippage_curve: 3.0,
+            convexity: 0.5,
+        }
+    }
+}
+
+pub struct StateImpactEvaluator {
+    params: ImpactModelParams,
+}
+
+impl Default for StateImpactEvaluator {
+    fn default() -> Self {
+        Self { params: ImpactModelParams::default() }
+    }
+}
 
 impl StateImpactEvaluator {
+    pub fn new(params: ImpactModelParams) -> Self {
+        Self { params }
+    }
+
     pub fn evaluate(group: &TxGroup, victims: &[VictimInput], snapshot: &StateSnapshot) -> GroupImpact {
+        Self::default().evaluate_inner(group, victims, snapshot)
+    }
+
+    fn evaluate_inner(&self, group: &TxGroup, victims: &[VictimInput], snapshot: &StateSnapshot) -> GroupImpact {
         let pool_type = Self::resolve_pool_type(group);
         let mut impacts = Vec::new();
         let mut expected_profit = 0.0;
@@ -75,7 +109,7 @@ impl StateImpactEvaluator {
                 PoolType::Lending => Self::expected_out_v2(v.amount_in, snapshot.reserve_in, snapshot.reserve_out),
             };
             let slippage_tolerated = if expected > 0.0 { ((expected - v.amount_out_min) / expected) * 100.0 } else { 0.0 };
-            let slippage_baseline = 3.0;
+            let slippage_baseline = self.params.slippage_curve;
             let slippage_adjusted = (slippage_tolerated + slippage_baseline) / 2.0;
             if let Some(prev) = prev_slippage {
                 let delta = slippage_tolerated - prev;
@@ -107,7 +141,7 @@ impl StateImpactEvaluator {
         if state_confidence < 0.0 { state_confidence = 0.0; }
         let impact_certainty = if impacts.iter().any(|v| v.token_behavior_unknown) { 0.61 } else { 0.9 };
         let mut opportunity_score = (state_confidence + impact_certainty) / 2.0;
-        if convexity_integrity_score < 0.5 { opportunity_score *= 0.5; }
+        if convexity_integrity_score < self.params.convexity { opportunity_score *= 0.5; }
 
         GroupImpact {
             group_id: group.group_key,
@@ -155,6 +189,17 @@ impl StateImpactEvaluator {
                     .await;
             }
         }
+    }
+}
+
+impl ImpactModel for StateImpactEvaluator {
+    fn evaluate_group(
+        &self,
+        group: &TxGroup,
+        victims: &[VictimInput],
+        snapshot: &StateSnapshot,
+    ) -> GroupImpact {
+        self.evaluate_inner(group, victims, snapshot)
     }
 }
 
