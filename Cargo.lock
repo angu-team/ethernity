@@ -1017,6 +1017,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ethernity-detector-mev"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "ethereum-types",
+ "ethernity-core",
+ "ethers",
+ "hex",
+ "lru 0.10.1",
+ "parking_lot",
+ "serde",
+ "tiny-keccak",
+ "tokio",
+]
+
+[[package]]
 name = "ethernity-finder"
 version = "0.1.0"
 dependencies = [
