@@ -29,17 +29,36 @@ pub struct TxGroup {
     pub ordering_certainty_score: f64,
     pub reorderable: bool,
     pub contaminated: bool,
+    pub window_start: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AggregationEvent {
+    PartialGroup {
+        group_key: H256,
+        txs: Vec<AnnotatedTx>,
+        window_start: u64,
+    },
+    FinalizedGroup {
+        group_key: H256,
+        complete: bool,
+    },
 }
 
 /// Agrupador de transações relevates de acordo com tags e caminhos de tokens.
 pub struct TxAggregator {
     groups: HashMap<H256, TxGroup>,
+    window_start: u64,
 }
 
 impl TxAggregator {
     /// Cria um novo agregador vazio.
     pub fn new() -> Self {
-        Self { groups: HashMap::new() }
+        Self { groups: HashMap::new(), window_start: 0 }
+    }
+
+    pub fn set_window_start(&mut self, start: u64) {
+        self.window_start = start;
     }
 
     /// Obtém referência aos grupos existentes.
@@ -64,6 +83,7 @@ impl TxAggregator {
             ordering_certainty_score: 1.0,
             reorderable: false,
             contaminated: false,
+            window_start: self.window_start,
         });
 
         if tx.confidence < 0.5 {
@@ -93,6 +113,26 @@ impl TxAggregator {
         group.contaminated = Self::calc_contamination(group);
 
         Some(key)
+    }
+
+    /// Adiciona uma transação emitindo evento parcial.
+    pub fn add_tx_event(&mut self, tx: AnnotatedTx) -> Option<AggregationEvent> {
+        let key = self.add_tx(tx.clone())?;
+        let group = self.groups.get(&key)?;
+        Some(AggregationEvent::PartialGroup {
+            group_key: key,
+            txs: vec![tx],
+            window_start: group.window_start,
+        })
+    }
+
+    /// Finaliza todos os grupos em aberto retornando eventos.
+    pub fn finalize_events(&mut self, complete: bool) -> Vec<AggregationEvent> {
+        let mut out = Vec::new();
+        for key in self.groups.keys().cloned().collect::<Vec<_>>() {
+            out.push(AggregationEvent::FinalizedGroup { group_key: key, complete });
+        }
+        out
     }
 
     fn passes_filter(tx: &AnnotatedTx) -> bool {
@@ -176,6 +216,23 @@ impl TxAggregator {
                     let _ = tx.send(g.clone()).await;
                 }
             }
+        }
+    }
+
+    /// Consumes annotated transactions and emits [`AggregationEvent`].
+    pub async fn process_stream_events(
+        mut self,
+        mut rx: tokio::sync::mpsc::Receiver<AnnotatedTx>,
+        tx: tokio::sync::mpsc::Sender<AggregationEvent>,
+    ) {
+        while let Some(txn) = rx.recv().await {
+            if let Some(ev) = self.add_tx_event(txn) {
+                let _ = tx.send(ev).await;
+            }
+        }
+        // finalize when stream ends
+        for ev in self.finalize_events(true) {
+            let _ = tx.send(ev).await;
         }
     }
 }
