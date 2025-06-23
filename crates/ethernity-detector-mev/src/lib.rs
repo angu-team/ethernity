@@ -10,9 +10,11 @@ mod tx_aggregator;
 mod state_impact_evaluator;
 mod state_cache_manager;
 mod attack_detector;
+mod mempool_supervisor;
 
 pub use tx_nature_tagger::*;
 pub use tx_aggregator::*;
 pub use state_impact_evaluator::*;
 pub use state_cache_manager::*;
 pub use attack_detector::*;
+pub use mempool_supervisor::*;
