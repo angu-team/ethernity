@@ -56,7 +56,6 @@ pub struct GroupImpact {
     pub reorg_risk_level: String,
 }
 
-#[derive(Debug, Clone, Copy)]
 use std::sync::Arc;
 
 pub trait CurveModel: Send + Sync {
@@ -93,7 +92,7 @@ impl CurveModel for UniswapV3Curve {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ImpactModelParams {
     pub liquidity: f64,
     pub slippage_curve: f64,
@@ -156,10 +155,11 @@ impl StateImpactEvaluator {
     }
 
     pub fn evaluate(group: &TxGroup, victims: &[VictimInput], snapshot: &StateSnapshot) -> GroupImpact {
-        Self::default().evaluate_inner(group, victims, snapshot)
+        let mut eval = Self::default();
+        eval.evaluate_inner(group, victims, snapshot)
     }
 
-    fn evaluate_inner(&self, group: &TxGroup, victims: &[VictimInput], snapshot: &StateSnapshot) -> GroupImpact {
+    fn evaluate_inner(&mut self, group: &TxGroup, victims: &[VictimInput], snapshot: &StateSnapshot) -> GroupImpact {
         let pool_type = Self::resolve_pool_type(group);
         let mut impacts = Vec::new();
         let mut expected_profit = 0.0;
@@ -268,7 +268,7 @@ impl StateImpactEvaluator {
 
 impl ImpactModel for StateImpactEvaluator {
     fn evaluate_group(
-        &self,
+        &mut self,
         group: &TxGroup,
         victims: &[VictimInput],
         snapshot: &StateSnapshot,
