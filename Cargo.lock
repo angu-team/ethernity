@@ -1091,6 +1091,7 @@ dependencies = [
  "rocksdb",
  "serde",
  "serde_json",
+ "tempfile",
  "tiny-keccak",
  "tokio",
 ]
