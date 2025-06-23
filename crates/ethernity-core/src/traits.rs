@@ -26,6 +26,9 @@ pub trait RpcProvider: Send + Sync {
 
     /// Obtém o número do bloco atual
     async fn get_block_number(&self) -> Result<u64>;
+
+    /// Obtém o hash de um bloco
+    async fn get_block_hash(&self, block_number: u64) -> Result<ethereum_types::H256>;
 }
 
 /// Trait para detectores de eventos

@@ -1,4 +1,4 @@
-use ethernity_detector_mev::{AnnotatedTx, TxAggregator, StateCacheManager, SnapshotProfile};
+use ethernity_detector_mev::{AnnotatedTx, TxAggregator, StateSnapshotRepository, SnapshotProfile};
 use ethernity_core::{traits::RpcProvider, error::Result, types::TransactionHash};
 use ethereum_types::{Address, H256, U256};
 use async_trait::async_trait;
@@ -17,12 +17,13 @@ impl RpcProvider for DummyProvider {
         Ok(out)
     }
     async fn get_block_number(&self) -> Result<u64> { Ok(100) }
+    async fn get_block_hash(&self, _block_number: u64) -> Result<H256> { Ok(H256::zero()) }
 }
 
 #[tokio::test]
 async fn cache_basic_snapshot() {
     let provider = DummyProvider;
-    let manager = StateCacheManager::new(provider);
+    let manager = StateSnapshotRepository::open(provider, "test_db").unwrap();
 
     let mut aggr = TxAggregator::new();
     let token_paths = vec![Address::repeat_byte(0x01), Address::repeat_byte(0x02)];

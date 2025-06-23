@@ -272,6 +272,10 @@ mod tests {
         async fn get_block_number(&self) -> ethernity_core::error::Result<u64> {
             Ok(0)
         }
+
+        async fn get_block_hash(&self, _block_number: u64) -> ethernity_core::error::Result<ethereum_types::H256> {
+            Ok(ethereum_types::H256::zero())
+        }
     }
 
     struct DummyDetector;

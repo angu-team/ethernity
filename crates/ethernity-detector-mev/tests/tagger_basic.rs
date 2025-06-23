@@ -27,6 +27,10 @@ impl RpcProvider for DummyProvider {
     async fn get_block_number(&self) -> Result<u64> {
         Ok(0)
     }
+
+    async fn get_block_hash(&self, _block_number: u64) -> Result<H256> {
+        Ok(H256::zero())
+    }
 }
 
 #[tokio::test]
