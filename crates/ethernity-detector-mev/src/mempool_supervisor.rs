@@ -6,6 +6,9 @@ use crate::{
 use dashmap::DashMap;
 use ethernity_core::{traits::RpcProvider, error::Result, types::TransactionHash};
 use std::time::{Duration, Instant};
+use tokio::sync::mpsc;
+use tokio::time;
+use crate::events::{SupervisorEvent, BlockMetadata};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OperationalMode {
@@ -178,5 +181,51 @@ impl<P: RpcProvider + Clone> MempoolSupervisor<P> {
             self.window_id += 1;
         }
         Ok(result)
+    }
+
+    async fn handle_event(
+        &mut self,
+        event: SupervisorEvent,
+        tx: &mpsc::Sender<GroupReady>,
+    ) -> Result<()> {
+        match event {
+            SupervisorEvent::NewTxObserved(txn) => {
+                self.ingest_tx(txn);
+            }
+            SupervisorEvent::BlockAdvanced(BlockMetadata { number }) => {
+                let groups = self.finalize_groups(number).await?;
+                for g in groups {
+                    let _ = tx.send(g).await;
+                }
+                self.window_id += 1;
+                self.last_block = number;
+            }
+            SupervisorEvent::StateRefreshed(_tag) => {}
+            SupervisorEvent::GroupFinalized(_id) => {}
+        }
+        Ok(())
+    }
+
+    pub async fn process_stream(
+        mut self,
+        mut rx: mpsc::Receiver<SupervisorEvent>,
+        tx: mpsc::Sender<GroupReady>,
+    ) {
+        let mut ticker = time::interval(self.window_duration);
+        loop {
+            tokio::select! {
+                _ = ticker.tick() => {
+                    if let Ok(groups) = self.tick().await {
+                        for g in groups {
+                            let _ = tx.send(g).await;
+                        }
+                    }
+                }
+                Some(ev) = rx.recv() => {
+                    let _ = self.handle_event(ev, &tx).await;
+                }
+                else => { break; }
+            }
+        }
     }
 }
