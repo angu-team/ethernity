@@ -4,7 +4,7 @@ use ethernity_core::types::TransactionHash;
 use ethereum_types::{Address, H256};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum PoolType {
     V2,
     V3,
@@ -56,8 +56,8 @@ pub struct GroupImpact {
     pub reorg_risk_level: String,
 }
 
-#[derive(Debug, Clone, Copy)]
 use std::sync::Arc;
+use parking_lot::Mutex;
 
 pub trait CurveModel: Send + Sync {
     fn expected_out(&self, amount_in: f64, snapshot: &StateSnapshot) -> f64;
@@ -93,7 +93,7 @@ impl CurveModel for UniswapV3Curve {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ImpactModelParams {
     pub liquidity: f64,
     pub slippage_curve: f64,
@@ -141,18 +141,18 @@ impl SlippageHistory {
 
 pub struct StateImpactEvaluator {
     params: ImpactModelParams,
-    slippage_history: SlippageHistory,
+    slippage_history: Mutex<SlippageHistory>,
 }
 
 impl Default for StateImpactEvaluator {
     fn default() -> Self {
-        Self { params: ImpactModelParams::default(), slippage_history: SlippageHistory::new(10) }
+        Self { params: ImpactModelParams::default(), slippage_history: Mutex::new(SlippageHistory::new(10)) }
     }
 }
 
 impl StateImpactEvaluator {
     pub fn new(params: ImpactModelParams) -> Self {
-        Self { params, slippage_history: SlippageHistory::new(10) }
+        Self { params, slippage_history: Mutex::new(SlippageHistory::new(10)) }
     }
 
     pub fn evaluate(group: &TxGroup, victims: &[VictimInput], snapshot: &StateSnapshot) -> GroupImpact {
@@ -174,10 +174,9 @@ impl StateImpactEvaluator {
                 PoolType::Lending => self.params.curve_model.expected_out(v.amount_in, &snapshot_local),
             };
             let slippage_tolerated = if expected > 0.0 { ((expected - v.amount_out_min) / expected) * 100.0 } else { 0.0 };
-            let baseline_dynamic = if self.slippage_history.is_empty() {
-                self.params.slippage_curve
-            } else {
-                self.slippage_history.average()
+            let baseline_dynamic = {
+                let hist = self.slippage_history.lock();
+                if hist.is_empty() { self.params.slippage_curve } else { hist.average() }
             };
             let slippage_baseline = baseline_dynamic;
             let slippage_adjusted = (slippage_tolerated + slippage_baseline) / 2.0;
@@ -188,7 +187,7 @@ impl StateImpactEvaluator {
                 }
             }
             prev_slippage = Some(slippage_tolerated);
-            self.slippage_history.record(slippage_tolerated);
+            self.slippage_history.lock().record(slippage_tolerated);
             expected_profit += expected - v.amount_out_min;
             impacts.push(VictimImpact {
                 tx_hash: v.tx_hash,
@@ -230,7 +229,7 @@ impl StateImpactEvaluator {
         }
     }
 
-    fn resolve_pool_type(group: &TxGroup) -> PoolType {
+    pub fn resolve_pool_type(group: &TxGroup) -> PoolType {
         let tags: Vec<String> = group.txs.iter().flat_map(|t| t.tags.clone()).collect();
         if tags.iter().any(|t| t == "swap-v2") { PoolType::V2 }
         else if tags.iter().any(|t| t == "swap-v3") { PoolType::V3 }
