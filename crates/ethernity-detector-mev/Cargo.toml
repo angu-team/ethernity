@@ -25,3 +25,4 @@ serde_json = { workspace = true }
 hex = "0.4"
 tokio = { workspace = true, features = ["full"] }
 tempfile = "3"
+loom = "0.7"
