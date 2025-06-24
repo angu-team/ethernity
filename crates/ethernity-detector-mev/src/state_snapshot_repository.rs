@@ -401,4 +401,32 @@ mod tests {
         let entry: PersistedSnapshot = serde_json::from_slice(raw.value()).unwrap();
         assert_eq!(entry.group_origin.len(), 2);
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn concurrent_snapshot_deadlock_prevention() {
+        use futures::future::join_all;
+        use std::sync::Arc;
+        use tokio::time::{timeout, Duration};
+
+        let dir = TempDir::new().unwrap();
+        let provider = DummyProvider::default();
+        for _ in 0..20 { provider.push_response(1000, 0); }
+        provider.set_hash(1, H256::repeat_byte(0x01));
+        let repo = Arc::new(StateSnapshotRepository::open(provider.clone(), dir.path()).unwrap());
+
+        let mut handles = Vec::new();
+        for i in 0u8..20 {
+            let r = Arc::clone(&repo);
+            let groups = make_group(Address::repeat_byte(i));
+            handles.push(tokio::spawn(async move {
+                r.snapshot_groups(&groups, 1, SnapshotProfile::Basic).await.unwrap();
+            }));
+        }
+
+        timeout(Duration::from_secs(5), join_all(handles)).await.unwrap();
+
+        for i in 0u8..20 {
+            assert!(repo.get_state(Address::repeat_byte(i), 1, SnapshotProfile::Basic).is_some());
+        }
+    }
 }

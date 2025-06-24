@@ -1026,6 +1026,7 @@ dependencies = [
  "ethereum-types",
  "ethernity-core",
  "ethers",
+ "futures",
  "hex",
  "loom",
  "lru 0.10.1",
