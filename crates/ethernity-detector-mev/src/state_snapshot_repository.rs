@@ -154,3 +154,220 @@ impl<P: RpcProvider> StateSnapshotRepository<P> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_trait::async_trait;
+    use ethernity_core::{traits::RpcProvider, error::Result, types::TransactionHash};
+    use std::sync::{Arc, Mutex};
+    use tempfile::TempDir;
+
+    #[derive(Clone, Default)]
+    struct DummyProvider {
+        responses: Arc<Mutex<Vec<Vec<u8>>>>,
+        call_count: Arc<Mutex<usize>>,
+        hashes: Arc<Mutex<HashMap<u64, H256>>>,
+    }
+
+    impl DummyProvider {
+        fn push_response(&self, r0: u128, r1: u128) {
+            let mut buf = vec![0u8; 64];
+            U256::from(r0).to_big_endian(&mut buf[0..32]);
+            U256::from(r1).to_big_endian(&mut buf[32..64]);
+            self.responses.lock().unwrap().push(buf);
+        }
+
+        fn push_raw(&self, data: Vec<u8>) {
+            self.responses.lock().unwrap().push(data);
+        }
+
+        fn set_hash(&self, block: u64, hash: H256) {
+            self.hashes.lock().unwrap().insert(block, hash);
+        }
+
+        fn calls(&self) -> usize {
+            *self.call_count.lock().unwrap()
+        }
+    }
+
+    #[async_trait]
+    impl RpcProvider for DummyProvider {
+        async fn get_transaction_trace(&self, _tx_hash: TransactionHash) -> Result<Vec<u8>> { Ok(vec![]) }
+        async fn get_transaction_receipt(&self, _tx_hash: TransactionHash) -> Result<Vec<u8>> { Ok(vec![]) }
+        async fn get_code(&self, _address: Address) -> Result<Vec<u8>> { Ok(vec![]) }
+        async fn call(&self, _to: Address, _data: Vec<u8>) -> Result<Vec<u8>> {
+            *self.call_count.lock().unwrap() += 1;
+            Ok(self.responses.lock().unwrap().remove(0))
+        }
+        async fn get_block_number(&self) -> Result<u64> { Ok(0) }
+        async fn get_block_hash(&self, block_number: u64) -> Result<H256> {
+            Ok(*self.hashes.lock().unwrap().get(&block_number).unwrap_or(&H256::zero()))
+        }
+    }
+
+    fn make_group(target: Address) -> HashMap<H256, TxGroup> {
+        let gid = H256::repeat_byte(0x11);
+        let group = TxGroup {
+            group_key: gid,
+            token_paths: vec![Address::repeat_byte(0x01), Address::repeat_byte(0x02)],
+            targets: vec![target],
+            txs: Vec::new(),
+            block_number: None,
+            direction_signature: "sig".into(),
+            ordering_certainty_score: 1.0,
+            reorderable: false,
+            contaminated: false,
+            window_start: 0,
+        };
+        let mut map = HashMap::new();
+        map.insert(gid, group);
+        map
+    }
+
+    #[tokio::test]
+    async fn open_and_persist() {
+        let dir = TempDir::new().unwrap();
+        let provider = DummyProvider::default();
+        provider.push_response(1000, 1000);
+        provider.set_hash(1, H256::repeat_byte(0x01));
+        let repo = StateSnapshotRepository::open(provider.clone(), dir.path()).unwrap();
+        let groups = make_group(Address::repeat_byte(0xaa));
+        repo.snapshot_groups(&groups, 1, SnapshotProfile::Basic).await.unwrap();
+        drop(repo);
+
+        let repo2 = StateSnapshotRepository::open(provider, dir.path()).unwrap();
+        let snap = repo2.get_state(Address::repeat_byte(0xaa), 1, SnapshotProfile::Basic).unwrap();
+        assert_eq!(snap.reserve_in, 1000.0);
+    }
+
+    #[tokio::test]
+    async fn store_multi_profile() {
+        let dir = TempDir::new().unwrap();
+        let provider = DummyProvider::default();
+        provider.push_response(1000, 1000);
+        provider.push_response(2000, 2000);
+        provider.set_hash(1, H256::repeat_byte(0x01));
+        let repo = StateSnapshotRepository::open(provider.clone(), dir.path()).unwrap();
+        let groups = make_group(Address::repeat_byte(0xaa));
+        repo.snapshot_groups(&groups, 1, SnapshotProfile::Basic).await.unwrap();
+        repo.snapshot_groups(&groups, 1, SnapshotProfile::Extended).await.unwrap();
+        let a = repo.get_state(Address::repeat_byte(0xaa), 1, SnapshotProfile::Basic).unwrap();
+        let b = repo.get_state(Address::repeat_byte(0xaa), 1, SnapshotProfile::Extended).unwrap();
+        assert_eq!(a.reserve_in, 1000.0);
+        assert_eq!(b.reserve_in, 2000.0);
+    }
+
+    #[test]
+    fn deterministic_key() {
+        let addr = Address::repeat_byte(0xaa);
+        let k1 = StateSnapshotRepository::<DummyProvider>::key(addr, 1, SnapshotProfile::Basic);
+        let k2 = StateSnapshotRepository::<DummyProvider>::key(addr, 1, SnapshotProfile::Basic);
+        assert_eq!(k1, k2);
+    }
+
+    #[tokio::test]
+    async fn serialization_cycle() {
+        let dir = TempDir::new().unwrap();
+        let provider = DummyProvider::default();
+        provider.push_response(1234, 5678);
+        provider.set_hash(1, H256::repeat_byte(0x02));
+        let repo = StateSnapshotRepository::open(provider.clone(), dir.path()).unwrap();
+        let groups = make_group(Address::repeat_byte(0xaa));
+        repo.snapshot_groups(&groups, 1, SnapshotProfile::Basic).await.unwrap();
+        let original = repo.get_state(Address::repeat_byte(0xaa), 1, SnapshotProfile::Basic).unwrap();
+        drop(repo);
+        let repo2 = StateSnapshotRepository::open(provider, dir.path()).unwrap();
+        let loaded = repo2.get_state(Address::repeat_byte(0xaa), 1, SnapshotProfile::Basic).unwrap();
+        assert_eq!(original.reserve_in, loaded.reserve_in);
+        assert_eq!(original.reserve_out, loaded.reserve_out);
+    }
+
+    #[tokio::test]
+    async fn history_limit_and_volatility() {
+        let dir = TempDir::new().unwrap();
+        let provider = DummyProvider::default();
+        provider.set_hash(1, H256::from_low_u64_be(1));
+        provider.set_hash(2, H256::from_low_u64_be(2));
+        provider.set_hash(3, H256::from_low_u64_be(3));
+        provider.set_hash(4, H256::from_low_u64_be(4));
+        provider.push_response(1000, 0);
+        provider.push_response(1000, 0);
+        provider.push_response(1100, 0);
+        provider.push_response(1200, 0);
+        let repo = StateSnapshotRepository::open(provider.clone(), dir.path()).unwrap();
+        let groups = make_group(Address::repeat_byte(0xaa));
+        repo.snapshot_groups(&groups, 1, SnapshotProfile::Basic).await.unwrap();
+        repo.snapshot_groups(&groups, 2, SnapshotProfile::Basic).await.unwrap();
+        repo.snapshot_groups(&groups, 3, SnapshotProfile::Basic).await.unwrap();
+        repo.snapshot_groups(&groups, 4, SnapshotProfile::Basic).await.unwrap();
+        let hist = repo.history.lock();
+        let list = hist.get(&Address::repeat_byte(0xaa)).unwrap();
+        assert_eq!(list.len(), 3);
+        assert!(list.iter().all(|e| e.block_number >= 2));
+        let last = repo.get_state(Address::repeat_byte(0xaa), 4, SnapshotProfile::Basic).unwrap();
+        assert!(last.volatility_flag);
+    }
+
+    #[tokio::test]
+    async fn fork_invalidation_and_refetch() {
+        let dir = TempDir::new().unwrap();
+        let provider = DummyProvider::default();
+        provider.set_hash(1, H256::from_low_u64_be(1));
+        provider.push_response(1000, 0);
+        provider.push_response(2000, 0);
+        let repo = StateSnapshotRepository::open(provider.clone(), dir.path()).unwrap();
+        let groups = make_group(Address::repeat_byte(0xaa));
+        repo.snapshot_groups(&groups, 1, SnapshotProfile::Basic).await.unwrap();
+        let c1 = provider.calls();
+        // same hash should not trigger fetch
+        provider.set_hash(1, H256::from_low_u64_be(1));
+        repo.snapshot_groups(&groups, 1, SnapshotProfile::Basic).await.unwrap();
+        assert_eq!(provider.calls(), c1);
+        // change hash -> refetch
+        provider.set_hash(1, H256::from_low_u64_be(2));
+        repo.snapshot_groups(&groups, 1, SnapshotProfile::Basic).await.unwrap();
+        assert!(provider.calls() > c1);
+        let snap = repo.get_state(Address::repeat_byte(0xaa), 1, SnapshotProfile::Basic).unwrap();
+        assert_eq!(snap.reserve_in, 2000.0);
+    }
+
+    #[tokio::test]
+    async fn fetch_v2_snapshot_valid_invalid() {
+        let dir = TempDir::new().unwrap();
+        let provider = DummyProvider::default();
+        provider.push_response(1000, 1000);
+        provider.push_raw(vec![1, 2, 3]);
+        let repo = StateSnapshotRepository::open(provider.clone(), dir.path()).unwrap();
+        let ok = repo.fetch_v2_snapshot(Address::repeat_byte(0xaa)).await.unwrap();
+        assert_eq!(ok.reserve_in, 1000.0);
+        let err = repo.fetch_v2_snapshot(Address::repeat_byte(0xaa)).await.unwrap_err();
+        match err {
+            Error::DecodeError(_) => {},
+            _ => panic!("unexpected error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn snapshot_groups_dedup_origin() {
+        let dir = TempDir::new().unwrap();
+        let provider = DummyProvider::default();
+        provider.push_response(1000, 0);
+        provider.set_hash(1, H256::from_low_u64_be(1));
+        let repo = StateSnapshotRepository::open(provider.clone(), dir.path()).unwrap();
+
+        let target = Address::repeat_byte(0xaa);
+        let mut groups = make_group(target);
+        let gid2 = H256::repeat_byte(0x22);
+        let group2 = TxGroup { targets: vec![target], group_key: gid2, ..groups.values().next().unwrap().clone() };
+        groups.insert(gid2, group2);
+
+        repo.snapshot_groups(&groups, 1, SnapshotProfile::Basic).await.unwrap();
+        assert_eq!(provider.calls(), 1);
+
+        let key = StateSnapshotRepository::<DummyProvider>::key(target, 1, SnapshotProfile::Basic);
+        let raw = repo.db.get(key.as_bytes()).unwrap().unwrap();
+        let entry: PersistedSnapshot = serde_json::from_slice(&raw).unwrap();
+        assert_eq!(entry.group_origin.len(), 2);
+    }
+}
