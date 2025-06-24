@@ -168,6 +168,19 @@ fn metric_direction_signature() {
 }
 
 #[test]
+fn aggregate_multiple_pools() {
+    let mut aggr = TxAggregator::new();
+    let tokens = vec![Address::repeat_byte(0x01), Address::repeat_byte(0x02)];
+    let tags = vec!["swap-v2".to_string()];
+    for i in 0..3u8 {
+        let targets = vec![Address::from_low_u64_be(i as u64)];
+        let tx = make_tx(0x90 + i, i as u64, 1.0, 0.9, tokens.clone(), targets, tags.clone());
+        aggr.add_tx(tx);
+    }
+    assert_eq!(aggr.groups().len(), 3);
+}
+
+#[test]
 fn metric_reorderable_flag() {
     let mut aggr = TxAggregator::new();
     let tokens = vec![Address::repeat_byte(0x01), Address::repeat_byte(0x02)];

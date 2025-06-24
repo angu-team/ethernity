@@ -71,8 +71,9 @@ fn constant_product_curve_calculation() {
     let curve = ConstantProductCurve::default();
     let snap = default_snapshot();
     let out = curve.expected_out(100.0, &snap);
-    let expected = (100.0 * 997.0 * snap.reserve_out)
-        / (snap.reserve_in * 1000.0 + 100.0 * 997.0);
+    let fee_mul = 1.0 - curve.fee;
+    let expected = (100.0 * fee_mul * snap.reserve_out)
+        / (snap.reserve_in + 100.0 * fee_mul);
     assert!((out - expected).abs() < 1e-6);
 }
 
@@ -90,7 +91,8 @@ fn apply_trade_updates_state() {
     let curve = ConstantProductCurve::default();
     let mut snap = default_snapshot();
     curve.apply_trade(100.0, &mut snap);
-    let expected_out = (100.0 * 997.0 * 1000.0) / (1000.0 * 1000.0 + 100.0 * 997.0);
+    let fee_mul = 1.0 - curve.fee;
+    let expected_out = (100.0 * fee_mul * 1000.0) / (1000.0 + 100.0 * fee_mul);
     assert!((snap.reserve_in - 1100.0).abs() < 1e-6);
     assert!((snap.reserve_out - (1000.0 - expected_out)).abs() < 1e-6);
 }
@@ -129,7 +131,8 @@ fn slippage_tolerated_and_adjusted() {
     let snap = default_snapshot();
     let res = ImpactModel::evaluate_group(&mut ev, group, &victims, &snap);
     let victim = &res.victims[0];
-    let expected = (100.0 * 997.0 * 1000.0) / (1000.0 * 1000.0 + 100.0 * 997.0);
+    let fee_mul = 1.0 - 0.003;
+    let expected = (100.0 * fee_mul * 1000.0) / (1000.0 + 100.0 * fee_mul);
     let slippage = ((expected - 90.0) / expected) * 100.0;
     assert!((victim.slippage_tolerated - slippage).abs() < 1e-6);
     assert!((victim.slippage_baseline - sc).abs() < 1e-6);
@@ -183,7 +186,7 @@ fn state_confidence_and_impact_certainty() {
 fn opportunity_score_penalty_with_convexity() {
     let (aggr, key) = make_group(vec!["swap-v2".into()]);
     let group = aggr.groups().get(&key).unwrap();
-    let params = ImpactModelParams { curve_model: Arc::new(ConstantProductCurve), ..Default::default() };
+    let params = ImpactModelParams { curve_model: Arc::new(ConstantProductCurve::default()), ..Default::default() };
     let mut ev = StateImpactEvaluator::new(params);
     let victims = vec![
         VictimInput { tx_hash: H256::repeat_byte(0x01), amount_in: 100.0, amount_out_min: 90.0, token_behavior_unknown: false, flash_loan_amount: None },
@@ -199,7 +202,7 @@ fn multiple_victims_lightweight_simulation() {
     let (aggr, key) = make_group(vec!["swap-v2".into()]);
     let group = aggr.groups().get(&key).unwrap();
     let mut params = ImpactModelParams::default();
-    params.curve_model = Arc::new(ConstantProductCurve);
+    params.curve_model = Arc::new(ConstantProductCurve::default());
     params.lightweight_simulation = true;
     let mut ev = StateImpactEvaluator::new(params);
     let victims = vec![
@@ -238,7 +241,7 @@ fn flash_loan_impact_detection() {
     let (aggr, key) = make_group(vec!["swap-v2".into()]);
     let group = aggr.groups().get(&key).unwrap();
     let params = ImpactModelParams {
-        curve_model: Arc::new(ConstantProductCurve),
+        curve_model: Arc::new(ConstantProductCurve::default()),
         lightweight_simulation: true,
         ..Default::default()
     };
@@ -260,8 +263,9 @@ fn flash_loan_impact_detection() {
         volatility_flag: false,
     };
     let res = ImpactModel::evaluate_group(&mut ev, group, &victims, &snapshot);
-    let denom = 1_000_000.0 * 1000.0 + 10_000_000.0 * 997.0;
-    let expected = (10_000_000.0 * 997.0 * 1_000_000.0) / denom;
+    let fee_mul = 1.0 - 0.003;
+    let denom = 1_000_000.0 + 10_000_000.0 * fee_mul;
+    let expected = (10_000_000.0 * fee_mul * 1_000_000.0) / denom;
     let profit = expected - 90.0;
     assert!((res.expected_profit_backrun - profit).abs() < 1e-6);
     assert!((res.opportunity_score - 0.95).abs() < 1e-6);

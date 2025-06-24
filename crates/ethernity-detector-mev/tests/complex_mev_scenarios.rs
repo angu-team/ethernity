@@ -102,3 +102,26 @@ fn state_impact_deflationary_multi_victims() {
     assert_eq!(impact.impact_certainty, 0.61);
 }
 
+#[test]
+fn high_volatility_snapshot() {
+    let mut aggr = TxAggregator::new();
+    let tokens = vec![Address::repeat_byte(0x01), Address::repeat_byte(0x02)];
+    let targets = vec![Address::repeat_byte(0xaa)];
+    let tags = vec!["swap-v2".to_string()];
+    aggr.add_tx(make_tx(0x10, 1, 10.0, None, &tokens, &targets, &tags));
+    let key = *aggr.groups().keys().next().unwrap();
+    let group = aggr.groups().get(&key).unwrap();
+    let victims = vec![VictimInput {
+        tx_hash: H256::repeat_byte(0x10),
+        amount_in: 100.0,
+        amount_out_min: 90.0,
+        token_behavior_unknown: false,
+        flash_loan_amount: None,
+    }];
+    let mut snapshot = default_snapshot();
+    snapshot.volatility_flag = true;
+    let mut eval = StateImpactEvaluator::new(ImpactModelParams::default());
+    let impact = ImpactModel::evaluate_group(&mut eval, group, &victims, &snapshot);
+    assert!(impact.victims[0].expected_amount_out > 0.0);
+}
+
