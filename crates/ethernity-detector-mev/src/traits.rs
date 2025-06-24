@@ -33,7 +33,7 @@ pub trait TransactionClassifier: Send + Sync {
 /// Modelo de impacto econômico.
 pub trait ImpactModel: Send + Sync {
     fn evaluate_group(
-        &self,
+        &mut self,
         group: &crate::TxGroup,
         victims: &[crate::VictimInput],
         snapshot: &crate::StateSnapshot,
