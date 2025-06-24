@@ -33,10 +33,8 @@ fn detect_basic_spoof() {
     let group = aggr.groups().values().next().unwrap();
     let detector = AttackDetector::new(1.0, 10);
     let res = detector.analyze_group(group).expect("should detect");
-    match res.attack_type {
-        Some(AttackType::Spoof { .. }) => assert!(res.confidence >= 0.5),
-        _ => panic!("expected spoof"),
-    }
+    assert!(res.attack_types.iter().any(|a| matches!(a, AttackType::Spoof { .. })));
+    assert!(res.confidence >= 0.5);
 }
 
 #[test]
@@ -71,10 +69,7 @@ fn detect_basic_backrun() {
     let group = aggr.groups().values().next().unwrap();
     let detector = AttackDetector::new(0.0, 10);
     let res = detector.analyze_group(group).expect("should detect");
-    match res.attack_type {
-        Some(AttackType::Backrun { .. }) => {},
-        _ => panic!("expected backrun"),
-    }
+    assert!(res.attack_types.iter().any(|a| matches!(a, AttackType::Backrun { .. })));
 }
 
 #[test]
@@ -139,10 +134,8 @@ fn edge_multiple_attacks_prefers_sandwich() {
     let group = aggr.groups().values().next().unwrap();
     let detector = AttackDetector::new(0.0, 10);
     let res = detector.analyze_group(group).expect("should detect");
-    match res.attack_type {
-        Some(AttackType::Sandwich { .. }) => {},
-        _ => panic!("expected sandwich first"),
-    }
+    // sandwich should still be detected when multiple strategies present
+    assert!(res.attack_types.iter().any(|a| matches!(a, AttackType::Sandwich { .. })));
 }
 
 #[test]
@@ -233,5 +226,55 @@ fn priority_ordering_by_seen() {
     let group = aggr.groups().values().next().unwrap();
     // first tx in sorted group should be b
     assert_eq!(group.txs.first().unwrap().tx_hash, H256::repeat_byte(0x91));
+}
+
+#[test]
+fn hybrid_attack_comprehensive_detection() {
+    let mut aggr = TxAggregator::new();
+    let token_paths = vec![Address::repeat_byte(0x01), Address::repeat_byte(0x02)];
+    let targets = vec![Address::repeat_byte(0xaa)];
+    let tags = vec!["swap-v2".to_string()];
+
+    // frontrun attacker
+    let mut a1 = AnnotatedTx {
+        tx_hash: H256::repeat_byte(0xa0),
+        token_paths: token_paths.clone(),
+        targets: targets.clone(),
+        tags: tags.clone(),
+        first_seen: 1,
+        gas_price: 50.0,
+        max_priority_fee_per_gas: Some(5.0),
+        confidence: 0.9,
+    };
+    // victim
+    let mut v = a1.clone();
+    v.tx_hash = H256::repeat_byte(0xa1);
+    v.first_seen = 2;
+    v.gas_price = 10.0;
+    v.max_priority_fee_per_gas = Some(1.0);
+    // attacker closes sandwich
+    let mut a2 = a1.clone();
+    a2.tx_hash = H256::repeat_byte(0xa2);
+    a2.first_seen = 3;
+    a2.gas_price = 48.0;
+    // backrun attacker
+    let mut a3 = a1.clone();
+    a3.tx_hash = H256::repeat_byte(0xa3);
+    a3.first_seen = 4;
+    a3.gas_price = 60.0;
+
+    aggr.add_tx(a1);
+    aggr.add_tx(v);
+    aggr.add_tx(a2);
+    aggr.add_tx(a3);
+
+    let group = aggr.groups().values().next().unwrap();
+    let detector = AttackDetector::new(0.0, 10);
+    let verdict = detector.analyze_group(group).expect("should detect hybrid");
+
+    assert!(verdict.attack_types.iter().any(|a| matches!(a, AttackType::Sandwich { .. })));
+    assert!(verdict.attack_types.iter().any(|a| matches!(a, AttackType::Frontrun { .. })));
+    assert!(verdict.attack_types.iter().any(|a| matches!(a, AttackType::Backrun { .. })));
+    assert!(verdict.confidence > 0.9);
 }
 

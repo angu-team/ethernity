@@ -60,7 +60,7 @@ fn detect_complex_multi_victim_sandwich() {
     let group = aggr.groups().values().next().unwrap();
     let detector = AttackDetector::new(1.0, 10);
     let verdict = detector.analyze_group(group).expect("should detect attack");
-    assert!(matches!(verdict.attack_type, Some(AttackType::Sandwich { .. })));
+    assert!(verdict.attack_types.iter().any(|a| matches!(a, AttackType::Sandwich { .. })));
 }
 
 #[test]
@@ -85,6 +85,7 @@ fn state_impact_deflationary_multi_victims() {
             amount_in: 100.0,
             amount_out_min: 97.0,
             token_behavior_unknown: true,
+            flash_loan_amount: None,
         })
         .collect();
 

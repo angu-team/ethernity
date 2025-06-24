@@ -14,7 +14,7 @@ pub enum AttackType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttackVerdict {
     pub group_key: H256,
-    pub attack_type: Option<AttackType>,
+    pub attack_types: Vec<AttackType>,
     pub confidence: f64,
     pub reconsiderable: bool,
 }
@@ -48,44 +48,45 @@ impl AttackDetector {
             .collect();
         txs.sort_by_key(|(t, _)| t.first_seen);
 
+        let mut attacks = Vec::new();
+        let mut confidences = Vec::new();
+
         if let Some((_, dom)) = self.detect_sandwich(&txs) {
-            return Some(AttackVerdict {
-                group_key: group.group_key,
-                attack_type: Some(AttackType::Sandwich { justification: "sandwich pattern".to_string() }),
-                confidence: 0.91,
-                reconsiderable: 0.91 < 0.8,
-            });
+            attacks.push(AttackType::Sandwich { justification: "sandwich pattern".to_string() });
+            confidences.push(0.91);
         }
 
         if let Some((_p, dom)) = self.detect_frontrun(&txs) {
             let conf = if dom >= 0.9 { 0.93 } else { dom };
-            return Some(AttackVerdict {
-                group_key: group.group_key,
-                attack_type: Some(AttackType::Frontrun { justification: format!("priority dominance {:.2}", dom) }),
-                confidence: conf,
-                reconsiderable: conf < 0.8,
-            });
+            attacks.push(AttackType::Frontrun { justification: format!("priority dominance {:.2}", dom) });
+            confidences.push(conf);
         }
 
         if let Some((_p, score)) = self.detect_spoof(&txs) {
-            return Some(AttackVerdict {
-                group_key: group.group_key,
-                attack_type: Some(AttackType::Spoof { justification: "suspicious gas pattern".to_string() }),
-                confidence: score,
-                reconsiderable: score < 0.8,
-            });
+            attacks.push(AttackType::Spoof { justification: "suspicious gas pattern".to_string() });
+            confidences.push(score);
         }
 
         if let Some((_p, conf)) = self.detect_backrun(&txs) {
-            return Some(AttackVerdict {
-                group_key: group.group_key,
-                attack_type: Some(AttackType::Backrun { justification: "backrun sequence".to_string() }),
-                confidence: conf,
-                reconsiderable: conf < 0.8,
-            });
+            attacks.push(AttackType::Backrun { justification: "backrun sequence".to_string() });
+            confidences.push(conf);
         }
 
-        None
+        if attacks.is_empty() {
+            return None;
+        }
+
+        let base_conf: f64 = confidences.iter().copied().sum::<f64>() / confidences.len() as f64;
+        let complexity_bonus = 0.05 * (attacks.len() as f64 - 1.0);
+        let confidence = (base_conf + complexity_bonus).min(0.99);
+        let reconsiderable = confidence < 0.8;
+
+        Some(AttackVerdict {
+            group_key: group.group_key,
+            attack_types: attacks,
+            confidence,
+            reconsiderable,
+        })
     }
 
     fn detect_frontrun(&self, txs: &[( &AnnotatedTx, f64)]) -> Option<(Vec<TransactionHash>, f64)> {

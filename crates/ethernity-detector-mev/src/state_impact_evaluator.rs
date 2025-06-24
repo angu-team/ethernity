@@ -29,6 +29,8 @@ pub struct VictimInput {
     pub amount_in: f64,
     pub amount_out_min: f64,
     pub token_behavior_unknown: bool,
+    #[serde(default)]
+    pub flash_loan_amount: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -169,10 +171,11 @@ impl StateImpactEvaluator {
         let mut snapshot_local = snapshot.clone();
 
         for v in victims {
+            let trade_amount = v.flash_loan_amount.unwrap_or(v.amount_in);
             let expected = match pool_type {
-                PoolType::V2 | PoolType::Unknown => self.params.curve_model.expected_out(v.amount_in, &snapshot_local),
-                PoolType::V3 => self.params.curve_model.expected_out(v.amount_in, &snapshot_local),
-                PoolType::Lending => self.params.curve_model.expected_out(v.amount_in, &snapshot_local),
+                PoolType::V2 | PoolType::Unknown => self.params.curve_model.expected_out(trade_amount, &snapshot_local),
+                PoolType::V3 => self.params.curve_model.expected_out(trade_amount, &snapshot_local),
+                PoolType::Lending => self.params.curve_model.expected_out(trade_amount, &snapshot_local),
             };
             let slippage_tolerated = if expected > 0.0 { ((expected - v.amount_out_min) / expected) * 100.0 } else { 0.0 };
             let baseline_dynamic = {
@@ -201,7 +204,7 @@ impl StateImpactEvaluator {
                 token_behavior_unknown: v.token_behavior_unknown,
             });
             if self.params.lightweight_simulation {
-                self.params.curve_model.apply_trade(v.amount_in, &mut snapshot_local);
+                self.params.curve_model.apply_trade(trade_amount, &mut snapshot_local);
             }
         }
 

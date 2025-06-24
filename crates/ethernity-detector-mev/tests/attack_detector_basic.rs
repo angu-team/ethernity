@@ -26,10 +26,7 @@ fn detect_basic_frontrun() {
     let group = aggr.groups().values().next().unwrap();
     let detector = AttackDetector::new(1.0, 10);
     let res = detector.analyze_group(group).expect("should detect");
-    match res.attack_type {
-        Some(AttackType::Frontrun { .. }) => {}
-        _ => panic!("expected frontrun"),
-    }
+    assert!(res.attack_types.iter().any(|a| matches!(a, AttackType::Frontrun { .. })));
 }
 
 #[test]
@@ -59,10 +56,7 @@ fn detect_basic_sandwich() {
     let group = aggr.groups().values().next().unwrap();
     let detector = AttackDetector::new(1.0, 10);
     let res = detector.analyze_group(group).expect("should detect");
-    match res.attack_type {
-        Some(AttackType::Sandwich { .. }) => {}
-        _ => panic!("expected sandwich"),
-    }
+    assert!(res.attack_types.iter().any(|a| matches!(a, AttackType::Sandwich { .. })));
 }
 
 

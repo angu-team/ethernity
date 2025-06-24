@@ -27,6 +27,7 @@ fn evaluate_basic() {
         amount_in: 100.0,
         amount_out_min: 90.0,
         token_behavior_unknown: false,
+        flash_loan_amount: None,
     }];
 
     let snapshot = StateSnapshot {

@@ -124,6 +124,7 @@ fn slippage_tolerated_and_adjusted() {
         amount_in: 100.0,
         amount_out_min: 90.0,
         token_behavior_unknown: false,
+        flash_loan_amount: None,
     }];
     let snap = default_snapshot();
     let res = ImpactModel::evaluate_group(&mut ev, group, &victims, &snap);
@@ -154,7 +155,7 @@ fn dynamic_vs_static_baseline() {
     params.curve_model = Arc::new(ConstantProductCurve::default());
     let sc = params.slippage_curve;
     let mut ev = StateImpactEvaluator::new(params);
-    let victims = vec![VictimInput { tx_hash: H256::zero(), amount_in: 50.0, amount_out_min: 45.0, token_behavior_unknown: false }];
+    let victims = vec![VictimInput { tx_hash: H256::zero(), amount_in: 50.0, amount_out_min: 45.0, token_behavior_unknown: false, flash_loan_amount: None }];
     let snap = default_snapshot();
     let res1 = ImpactModel::evaluate_group(&mut ev, group, &victims, &snap);
     let baseline1 = res1.victims[0].slippage_baseline;
@@ -169,7 +170,7 @@ fn state_confidence_and_impact_certainty() {
     let (aggr, key) = make_group(vec!["swap-v2".into()]);
     let group = aggr.groups().get(&key).unwrap();
 
-    let victims = vec![VictimInput { tx_hash: H256::zero(), amount_in: 50.0, amount_out_min: 40.0, token_behavior_unknown: true }];
+    let victims = vec![VictimInput { tx_hash: H256::zero(), amount_in: 50.0, amount_out_min: 40.0, token_behavior_unknown: true, flash_loan_amount: None }];
     let mut snap = default_snapshot();
     snap.state_lag_blocks = 3;
     snap.reorg_risk_level = "high".into();
@@ -185,8 +186,8 @@ fn opportunity_score_penalty_with_convexity() {
     let params = ImpactModelParams { curve_model: Arc::new(ConstantProductCurve), ..Default::default() };
     let mut ev = StateImpactEvaluator::new(params);
     let victims = vec![
-        VictimInput { tx_hash: H256::repeat_byte(0x01), amount_in: 100.0, amount_out_min: 90.0, token_behavior_unknown: false },
-        VictimInput { tx_hash: H256::repeat_byte(0x02), amount_in: 50.0, amount_out_min: 40.0, token_behavior_unknown: false },
+        VictimInput { tx_hash: H256::repeat_byte(0x01), amount_in: 100.0, amount_out_min: 90.0, token_behavior_unknown: false, flash_loan_amount: None },
+        VictimInput { tx_hash: H256::repeat_byte(0x02), amount_in: 50.0, amount_out_min: 40.0, token_behavior_unknown: false, flash_loan_amount: None },
     ];
     let snap = default_snapshot();
     let res = ImpactModel::evaluate_group(&mut ev, group, &victims, &snap);
@@ -202,8 +203,8 @@ fn multiple_victims_lightweight_simulation() {
     params.lightweight_simulation = true;
     let mut ev = StateImpactEvaluator::new(params);
     let victims = vec![
-        VictimInput { tx_hash: H256::repeat_byte(0x01), amount_in: 100.0, amount_out_min: 90.0, token_behavior_unknown: false },
-        VictimInput { tx_hash: H256::repeat_byte(0x02), amount_in: 100.0, amount_out_min: 90.0, token_behavior_unknown: false },
+        VictimInput { tx_hash: H256::repeat_byte(0x01), amount_in: 100.0, amount_out_min: 90.0, token_behavior_unknown: false, flash_loan_amount: None },
+        VictimInput { tx_hash: H256::repeat_byte(0x02), amount_in: 100.0, amount_out_min: 90.0, token_behavior_unknown: false, flash_loan_amount: None },
     ];
     let snap = default_snapshot();
     let res = ImpactModel::evaluate_group(&mut ev, group, &victims, &snap);
@@ -230,5 +231,39 @@ async fn process_stream_pipeline() {
     drop(tx_in);
     let ev = rx_out.recv().await.expect("no impact event");
     assert_eq!(ev.group.group_key, group.group_key);
+}
+
+#[test]
+fn flash_loan_impact_detection() {
+    let (aggr, key) = make_group(vec!["swap-v2".into()]);
+    let group = aggr.groups().get(&key).unwrap();
+    let params = ImpactModelParams {
+        curve_model: Arc::new(ConstantProductCurve),
+        lightweight_simulation: true,
+        ..Default::default()
+    };
+    let mut ev = StateImpactEvaluator::new(params);
+    let victims = vec![VictimInput {
+        tx_hash: H256::repeat_byte(0x21),
+        amount_in: 100.0,
+        amount_out_min: 90.0,
+        token_behavior_unknown: false,
+        flash_loan_amount: Some(10_000_000.0),
+    }];
+    let snapshot = StateSnapshot {
+        reserve_in: 1_000_000.0,
+        reserve_out: 1_000_000.0,
+        sqrt_price_x96: None,
+        liquidity: None,
+        state_lag_blocks: 0,
+        reorg_risk_level: "low".into(),
+        volatility_flag: false,
+    };
+    let res = ImpactModel::evaluate_group(&mut ev, group, &victims, &snapshot);
+    let denom = 1_000_000.0 * 1000.0 + 10_000_000.0 * 997.0;
+    let expected = (10_000_000.0 * 997.0 * 1_000_000.0) / denom;
+    let profit = expected - 90.0;
+    assert!((res.expected_profit_backrun - profit).abs() < 1e-6);
+    assert!((res.opportunity_score - 0.95).abs() < 1e-6);
 }
 
