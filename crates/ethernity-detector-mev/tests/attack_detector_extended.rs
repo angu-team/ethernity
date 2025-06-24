@@ -278,3 +278,44 @@ fn hybrid_attack_comprehensive_detection() {
     assert!(verdict.confidence > 0.9);
 }
 
+#[test]
+fn attack_detection_malformed_input_resilience() {
+    let mut aggr = TxAggregator::new();
+    let token_paths = vec![Address::repeat_byte(0x01), Address::repeat_byte(0x02)];
+    let targets = vec![Address::repeat_byte(0xaa)];
+    let tags = vec!["swap-v2".to_string()];
+
+    let base = AnnotatedTx {
+        tx_hash: H256::repeat_byte(0xf0),
+        token_paths: token_paths.clone(),
+        targets: targets.clone(),
+        tags: tags.clone(),
+        first_seen: 1,
+        gas_price: 10.0,
+        max_priority_fee_per_gas: None,
+        confidence: 0.9,
+    };
+
+    let mut malformed = base.clone();
+    malformed.tx_hash = H256::repeat_byte(0xf1);
+    malformed.first_seen = u64::MAX;
+    malformed.gas_price = f64::NAN;
+    malformed.max_priority_fee_per_gas = Some(-1.0);
+
+    let mut extreme = base.clone();
+    extreme.tx_hash = H256::repeat_byte(0xf2);
+    extreme.first_seen = 2;
+    extreme.gas_price = f64::INFINITY;
+
+    aggr.add_tx(base);
+    aggr.add_tx(malformed);
+    aggr.add_tx(extreme);
+
+    let group = aggr.groups().values().next().unwrap();
+    let detector = AttackDetector::new(0.0, 10);
+    let verdict = std::panic::catch_unwind(|| detector.analyze_group(group));
+    assert!(verdict.is_ok(), "analyze_group panicked");
+    if let Some(v) = verdict.unwrap() {
+        assert_eq!(v.group_key, group.group_key);
+    }
+}
