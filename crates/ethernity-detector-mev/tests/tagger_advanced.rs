@@ -3,6 +3,7 @@ use ethernity_core::{traits::RpcProvider, error::{Result, Error}, types::Transac
 use ethereum_types::{Address, H256};
 use async_trait::async_trait;
 use std::sync::{Arc, Mutex};
+use ethereum_types::U256;
 
 #[derive(Clone)]
 struct CountingProvider {
@@ -35,6 +36,12 @@ impl RpcProvider for CountingProvider {
 fn padded(addr: Address) -> Vec<u8> {
     let mut v = vec![0u8; 32];
     v[12..].copy_from_slice(&addr.0);
+    v
+}
+
+fn be(n: usize) -> Vec<u8> {
+    let mut v = vec![0u8; 32];
+    U256::from(n).to_big_endian(&mut v);
     v
 }
 
@@ -180,5 +187,42 @@ async fn rpc_failure_propagates() {
     let tagger = TxNatureTagger::new(provider);
     let err = tagger.analyze(Address::zero(), &[], H256::zero()).await;
     assert!(err.is_err());
+}
+
+#[tokio::test]
+async fn detect_nested_proxy_chains() {
+    let provider = CountingProvider::new(vec![0x60, 0xf4, 0x56]);
+    let tagger = TxNatureTagger::new(provider);
+
+    let addr_a = Address::from_low_u64_be(1);
+    let addr_b = Address::from_low_u64_be(2);
+    let addr_c = Address::from_low_u64_be(3);
+    let token0 = Address::repeat_byte(0x11);
+    let token1 = Address::repeat_byte(0x22);
+
+    // Calldata para contrato C (swap)
+    let mut data_c = hex::decode("38ed1739").unwrap();
+    data_c.extend(padded(token0));
+    data_c.extend(padded(token1));
+    while data_c.len() % 32 != 0 { data_c.push(0); }
+
+    // Calldata para contrato B delegar para C
+    let mut data_b = vec![0xbb, 0xbb, 0xbb, 0xbb];
+    data_b.extend(padded(addr_c));
+    data_b.extend(be(64));
+    data_b.extend(be(data_c.len()));
+    data_b.extend(data_c.clone());
+    while data_b.len() % 32 != 0 { data_b.push(0); }
+
+    // Calldata para contrato A delegar para B
+    let mut data_a = vec![0xaa, 0xaa, 0xaa, 0xaa];
+    data_a.extend(padded(addr_b));
+    data_a.extend(be(64));
+    data_a.extend(be(data_b.len()));
+    data_a.extend(data_b);
+
+    let res = tagger.analyze(addr_a, &data_a, H256::zero()).await.unwrap();
+    assert!(res.tags.contains(&"proxy-call".to_string()));
+    assert_ne!(res.token_paths, vec![token0, token1]);
 }
 
