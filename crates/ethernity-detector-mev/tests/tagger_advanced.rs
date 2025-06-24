@@ -226,3 +226,79 @@ async fn detect_nested_proxy_chains() {
     assert_ne!(res.token_paths, vec![token0, token1]);
 }
 
+
+#[tokio::test]
+async fn malformed_bytecode_resilience() {
+    #[derive(Clone)]
+    struct MalformedProvider;
+    #[async_trait]
+    impl RpcProvider for MalformedProvider {
+        async fn get_transaction_trace(&self, _tx_hash: TransactionHash) -> Result<Vec<u8>> { Ok(vec![]) }
+        async fn get_transaction_receipt(&self, _tx_hash: TransactionHash) -> Result<Vec<u8>> { Ok(vec![]) }
+        async fn get_code(&self, _address: Address) -> Result<Vec<u8>> { Ok(vec![0xff]) }
+        async fn call(&self, _to: Address, _data: Vec<u8>) -> Result<Vec<u8>> { Ok(vec![]) }
+        async fn get_block_number(&self) -> Result<u64> { Ok(0) }
+        async fn get_block_hash(&self, _block_number: u64) -> Result<H256> { Ok(H256::zero()) }
+    }
+
+    let tagger = TxNatureTagger::new(MalformedProvider);
+    let data = hex::decode("deadbeef").unwrap();
+    let res = tagger.analyze(Address::zero(), &data, H256::zero()).await.unwrap();
+    assert!(res.tags.is_empty());
+    assert_eq!(res.confidence_components.structure, 0.5);
+    assert!(res.path_inference_failed);
+}
+
+#[tokio::test]
+async fn non_standard_calldata_handling() {
+    let provider = CountingProvider::new(vec![0x60, 0xf4, 0x56]);
+    let tagger = TxNatureTagger::new(provider);
+    let mut data = hex::decode("38ed1739").unwrap();
+    data.extend(vec![0x12, 0x34, 0x56]);
+    let res = tagger.analyze(Address::repeat_byte(9), &data, H256::zero()).await.unwrap();
+    assert!(res.tags.contains(&"swap-v2".to_string()));
+    assert!(res.token_paths.is_empty());
+    assert!(res.path_inference_failed);
+}
+
+#[tokio::test]
+async fn deeply_nested_proxy_chains() {
+    let provider = CountingProvider::new(vec![0x60, 0xf4, 0x56]);
+    let tagger = TxNatureTagger::new(provider);
+
+    let addr_a = Address::from_low_u64_be(1);
+    let addr_b = Address::from_low_u64_be(2);
+    let addr_c = Address::from_low_u64_be(3);
+    let addr_d = Address::from_low_u64_be(4);
+    let token0 = Address::repeat_byte(0x11);
+    let token1 = Address::repeat_byte(0x22);
+
+    let mut data_d = hex::decode("38ed1739").unwrap();
+    data_d.extend(padded(token0));
+    data_d.extend(padded(token1));
+    while data_d.len() % 32 != 0 { data_d.push(0); }
+
+    let mut data_c = vec![0xcc, 0xcc, 0xcc, 0xcc];
+    data_c.extend(padded(addr_d));
+    data_c.extend(be(64));
+    data_c.extend(be(data_d.len()));
+    data_c.extend(data_d.clone());
+    while data_c.len() % 32 != 0 { data_c.push(0); }
+
+    let mut data_b = vec![0xbb, 0xbb, 0xbb, 0xbb];
+    data_b.extend(padded(addr_c));
+    data_b.extend(be(64));
+    data_b.extend(be(data_c.len()));
+    data_b.extend(data_c);
+    while data_b.len() % 32 != 0 { data_b.push(0); }
+
+    let mut data_a = vec![0xaa, 0xaa, 0xaa, 0xaa];
+    data_a.extend(padded(addr_b));
+    data_a.extend(be(64));
+    data_a.extend(be(data_b.len()));
+    data_a.extend(data_b);
+
+    let res = tagger.analyze(addr_a, &data_a, H256::zero()).await.unwrap();
+    assert!(res.tags.contains(&"proxy-call".to_string()));
+    assert_ne!(res.token_paths, vec![token0, token1]);
+}
