@@ -2,6 +2,8 @@ use ethernity_core::types::TransactionHash;
 use ethereum_types::{Address, H256};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::num::NonZeroUsize;
+use lru::LruCache;
 use tiny_keccak::{Hasher, Keccak};
 
 /// Transação anotada proveniente do `TxNatureTagger` com informações adicionais de mempool.
@@ -48,13 +50,21 @@ pub enum AggregationEvent {
 /// Agrupador de transações relevates de acordo com tags e caminhos de tokens.
 pub struct TxAggregator {
     groups: HashMap<H256, TxGroup>,
+    order: LruCache<H256, ()>,
     window_start: u64,
 }
 
 impl TxAggregator {
+    /// Número máximo de grupos mantidos simultaneamente.
+    pub const MAX_GROUPS: usize = 1000;
+
     /// Cria um novo agregador vazio.
     pub fn new() -> Self {
-        Self { groups: HashMap::new(), window_start: 0 }
+        Self {
+            groups: HashMap::new(),
+            order: LruCache::new(NonZeroUsize::new(Self::MAX_GROUPS).unwrap()),
+            window_start: 0,
+        }
     }
 
     pub fn set_window_start(&mut self, start: u64) {
@@ -73,18 +83,30 @@ impl TxAggregator {
         }
 
         let key = Self::group_key(&tx.token_paths, &tx.targets, &tx.tags);
-        let group = self.groups.entry(key).or_insert_with(|| TxGroup {
-            group_key: key,
-            token_paths: tx.token_paths.clone(),
-            targets: tx.targets.clone(),
-            txs: Vec::new(),
-            block_number: None,
-            direction_signature: Self::direction_signature(&tx.token_paths),
-            ordering_certainty_score: 1.0,
-            reorderable: false,
-            contaminated: false,
-            window_start: self.window_start,
-        });
+        let group = if self.groups.contains_key(&key) {
+            self.order.put(key, ());
+            self.groups.get_mut(&key).unwrap()
+        } else {
+            if let Some((old_key, _)) = self.order.push(key, ()) {
+                self.groups.remove(&old_key);
+            }
+            self.groups.insert(
+                key,
+                TxGroup {
+                    group_key: key,
+                    token_paths: tx.token_paths.clone(),
+                    targets: tx.targets.clone(),
+                    txs: Vec::new(),
+                    block_number: None,
+                    direction_signature: Self::direction_signature(&tx.token_paths),
+                    ordering_certainty_score: 1.0,
+                    reorderable: false,
+                    contaminated: false,
+                    window_start: self.window_start,
+                },
+            );
+            self.groups.get_mut(&key).unwrap()
+        };
 
         if tx.confidence < 0.5 {
             let high = group

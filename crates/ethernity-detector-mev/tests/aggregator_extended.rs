@@ -261,6 +261,39 @@ async fn events_process_stream_events() {
 }
 
 #[test]
+fn group_count_hard_limit_enforcement() {
+    let mut aggr = TxAggregator::new();
+    let target = Address::repeat_byte(0xaa);
+    let tags = vec!["swap-v2".to_string()];
+
+    let mut first_key = H256::zero();
+    let mut last_key = H256::zero();
+    // create 100k unique groups
+    for i in 0..100_000u64 {
+        let tokens = vec![
+            Address::from_low_u64_be(i),
+            Address::from_low_u64_be(i.wrapping_add(1)),
+        ];
+        let tx = make_tx(
+            (i % 255) as u8,
+            i,
+            1.0,
+            0.9,
+            tokens.clone(),
+            vec![target],
+            tags.clone(),
+        );
+        let key = aggr.add_tx(tx).unwrap();
+        if i == 0 { first_key = key; }
+        last_key = key;
+    }
+
+    assert_eq!(aggr.groups().len(), TxAggregator::MAX_GROUPS);
+    assert!(!aggr.groups().contains_key(&first_key));
+    assert!(aggr.groups().contains_key(&last_key));
+}
+
+#[test]
 fn massive_timestamp_collision_stability() {
     let mut aggr = TxAggregator::new();
     let tokens = vec![Address::repeat_byte(0x01), Address::repeat_byte(0x02)];

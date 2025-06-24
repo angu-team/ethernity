@@ -88,3 +88,35 @@ async fn confidence_penalty_overlap() {
     let groups = sup.tick().await.unwrap();
     assert!((groups[0].group.txs[0].confidence - 0.9).abs() < 1e-6);
 }
+
+#[tokio::test]
+async fn memory_pressure_graceful_degradation() {
+    use rlimit::{Resource, setrlimit};
+
+    // impose a tight memory limit of 100MB
+    let limit = 100 * 1024 * 1024;
+    setrlimit(Resource::AS, limit, limit).expect("setrlimit failed");
+
+    let provider = DummyProvider::default();
+    let mut sup = MempoolSupervisor::new(provider.clone(), 1, Duration::from_secs(1), 10);
+
+    let heavy_targets = vec![Address::repeat_byte(0xbb); 300];
+    for i in 0u32..10_000u32 {
+        let tx = AnnotatedTx {
+            tx_hash: H256::from_low_u64_be(i as u64),
+            token_paths: vec![Address::repeat_byte(0x01), Address::repeat_byte(0x02)],
+            targets: heavy_targets.clone(),
+            tags: vec!["swap-v2".to_string()],
+            first_seen: i as u64,
+            gas_price: 10.0,
+            max_priority_fee_per_gas: None,
+            confidence: 1.0,
+        };
+        sup.ingest_tx(tx);
+    }
+
+    *provider.block.lock().unwrap() = 1;
+    // tick should succeed without panicking or crashing
+    let res = sup.tick().await;
+    assert!(res.is_ok());
+}
