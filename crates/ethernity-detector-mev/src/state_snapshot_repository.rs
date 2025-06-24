@@ -429,4 +429,45 @@ mod tests {
             assert!(repo.get_state(Address::repeat_byte(i), 1, SnapshotProfile::Basic).is_some());
         }
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn concurrent_db_write_corruption_prevention() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let dir = TempDir::new().unwrap();
+
+        let provider1 = DummyProvider::default();
+        provider1.push_response(1000, 0);
+        provider1.set_hash(1, H256::from_low_u64_be(1));
+        let repo1 = Arc::new(StateSnapshotRepository::open(provider1.clone(), dir.path()).unwrap());
+
+        let provider2 = DummyProvider::default();
+        provider2.push_response(2000, 0);
+        provider2.set_hash(1, H256::from_low_u64_be(1));
+
+        let target = Address::repeat_byte(0xaa);
+        let groups = make_group(target);
+        let path = dir.path().to_path_buf();
+        let groups_clone = groups.clone();
+        let handle = thread::spawn(move || {
+            match StateSnapshotRepository::open(provider2, &path) {
+                Ok(repo) => {
+                    let rt = tokio::runtime::Runtime::new().unwrap();
+                    rt.block_on(async {
+                        repo.snapshot_groups(&groups_clone, 1, SnapshotProfile::Basic).await.unwrap();
+                    });
+                }
+                Err(_) => {}
+            }
+        });
+
+        repo1.snapshot_groups(&groups, 1, SnapshotProfile::Basic).await.unwrap();
+        handle.join().unwrap();
+
+        drop(repo1);
+        let repo_final = StateSnapshotRepository::open(DummyProvider::default(), dir.path()).unwrap();
+        let snap = repo_final.get_state(target, 1, SnapshotProfile::Basic).unwrap();
+        assert!(snap.reserve_in == 1000.0 || snap.reserve_in == 2000.0);
+    }
 }
