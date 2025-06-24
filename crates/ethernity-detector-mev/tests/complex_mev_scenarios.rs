@@ -85,6 +85,7 @@ fn state_impact_deflationary_multi_victims() {
             amount_in: 100.0,
             amount_out_min: 97.0,
             token_behavior_unknown: true,
+            flash_loan_amount: None,
         })
         .collect();
 

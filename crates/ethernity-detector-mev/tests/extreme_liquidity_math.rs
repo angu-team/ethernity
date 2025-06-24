@@ -31,6 +31,7 @@ fn constant_product_low_liquidity() {
         amount_in: 1.0,
         amount_out_min: 0.0,
         token_behavior_unknown: false,
+        flash_loan_amount: None,
     }];
     let snapshot = StateSnapshot {
         reserve_in: 1e-18,
@@ -59,6 +60,7 @@ fn constant_product_high_liquidity() {
         amount_in: 1e6,
         amount_out_min: 0.0,
         token_behavior_unknown: false,
+        flash_loan_amount: None,
     }];
     let snapshot = StateSnapshot {
         reserve_in: 1e30,
@@ -87,6 +89,7 @@ fn uniswap_v3_extreme_price() {
         amount_in: 10.0,
         amount_out_min: 0.0,
         token_behavior_unknown: false,
+        flash_loan_amount: None,
     }];
     let snapshot = StateSnapshot {
         reserve_in: 0.0,
