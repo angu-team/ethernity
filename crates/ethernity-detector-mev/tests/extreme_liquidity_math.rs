@@ -3,6 +3,7 @@ use ethernity_detector_mev::{
     StateImpactEvaluator, ConstantProductCurve, UniswapV3Curve, ImpactModel,
     ImpactModelParams,
 };
+use ethernity_detector_mev::CurveModel;
 use ethereum_types::{Address, H256};
 use std::sync::Arc;
 
@@ -136,4 +137,27 @@ fn numerical_stability_extreme_values() {
     let out = res.victims[0].expected_amount_out;
     assert!(out.is_finite());
     assert!(out >= 0.0);
+}
+#[test]
+fn mathematical_edge_cases_comprehensive() {
+    let curve = ConstantProductCurve;
+    let reserves_in = [0.0, 1e-300, f64::MIN_POSITIVE, f64::MAX];
+    let amounts_in = [0.0, f64::MAX, -1.0];
+
+    for &r in &reserves_in {
+        for &a in &amounts_in {
+            let snap = StateSnapshot {
+                reserve_in: r,
+                reserve_out: 1.0,
+                sqrt_price_x96: None,
+                liquidity: None,
+                state_lag_blocks: 0,
+                reorg_risk_level: "low".into(),
+                volatility_flag: false,
+            };
+            let out = curve.expected_out(a, &snap);
+            assert!(out.is_finite(), "non-finite for r={r}, a={a}");
+            assert!(out >= 0.0, "negative for r={r}, a={a}");
+        }
+    }
 }
