@@ -293,3 +293,27 @@ fn group_count_hard_limit_enforcement() {
     assert!(aggr.groups().contains_key(&last_key));
 }
 
+#[test]
+fn massive_timestamp_collision_stability() {
+    let mut aggr = TxAggregator::new();
+    let tokens = vec![Address::repeat_byte(0x01), Address::repeat_byte(0x02)];
+    let targets = vec![Address::repeat_byte(0xaa)];
+    let tags = vec!["swap-v2".to_string()];
+
+    // insert 1000 transactions with the same timestamp but varying gas prices
+    for i in (0..1000u64).rev() {
+        let gas = i as f64;
+        let tx = make_tx((i % 255) as u8, 1234567890, gas, 0.9, tokens.clone(), targets.clone(), tags.clone());
+        aggr.add_tx(tx);
+    }
+
+    let group = aggr.groups().values().next().unwrap();
+    assert_eq!(group.txs.len(), 1000);
+    // should remain deterministic: sorted by gas_price since timestamps equal
+    for (idx, tx) in group.txs.iter().enumerate() {
+        assert_eq!(tx.gas_price, idx as f64);
+    }
+    assert_eq!(group.ordering_certainty_score, 1.0);
+    assert!(!group.reorderable);
+}
+
