@@ -242,15 +242,23 @@ impl StateImpactEvaluator {
     }
 
     fn expected_out_v2(amount_in: f64, reserve_in: f64, reserve_out: f64) -> f64 {
-        if reserve_in <= 0.0 || reserve_out <= 0.0 {
+        if reserve_in <= 0.0
+            || reserve_out <= 0.0
+            || amount_in <= 0.0
+            || !reserve_in.is_finite()
+            || !reserve_out.is_finite()
+            || !amount_in.is_finite()
+        {
             return 0.0;
         }
+
         let denom = reserve_in * 1000.0 + amount_in * 997.0;
-        if denom <= 0.0 {
+        if !denom.is_finite() || denom <= 0.0 {
             return 0.0;
         }
+
         let out = (amount_in * 997.0 * reserve_out) / denom;
-        if out.is_finite() { out } else { 0.0 }
+        if out.is_finite() && out >= 0.0 { out } else { 0.0 }
     }
 
     fn expected_out_v3(amount_in: f64, sqrt_price_x96: f64) -> f64 {
