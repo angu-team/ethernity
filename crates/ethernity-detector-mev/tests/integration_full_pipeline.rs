@@ -139,6 +139,6 @@ async fn integration_full_pipeline() {
         .analyze_group(group)
         .expect("verdict");
     assert_eq!(verdict.group_key, group.group_key);
-    assert!(matches!(verdict.attack_type, Some(_)));
+    assert!(!verdict.attack_types.is_empty());
 }
 
