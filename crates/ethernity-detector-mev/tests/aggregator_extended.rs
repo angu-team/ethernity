@@ -147,9 +147,11 @@ fn metric_contamination_variance() {
     let t1 = make_tx(0x80, 1, 1.0, 0.9, tokens.clone(), targets.clone(), tags.clone());
     let t2 = make_tx(0x81, 2, 1.0, 0.3, tokens.clone(), targets.clone(), tags.clone());
     aggr.add_tx(t1);
+    // second tx has low confidence and should be ignored
     aggr.add_tx(t2);
     let group = aggr.groups().values().next().unwrap();
-    assert!(group.contaminated);
+    assert!(!group.contaminated);
+    assert_eq!(group.txs.len(), 1);
 }
 
 #[test]
