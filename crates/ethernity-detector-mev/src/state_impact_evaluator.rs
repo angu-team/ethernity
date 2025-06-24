@@ -139,7 +139,6 @@ impl SlippageHistory {
     pub fn is_empty(&self) -> bool { self.values.is_empty() }
 }
 
-#[derive(Clone)]
 pub struct StateImpactEvaluator {
     params: ImpactModelParams,
     slippage_history: Mutex<SlippageHistory>,

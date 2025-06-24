@@ -3,7 +3,9 @@ use crate::tx_aggregator::TxGroup;
 use ethernity_core::error::{Error, Result};
 use ethernity_core::traits::RpcProvider;
 use ethereum_types::{Address, H256, U256};
-use rocksdb::{DB, Options};
+use redb::{Database, TableDefinition};
+
+const SNAPSHOT_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("snapshots");
 use parking_lot::Mutex;
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
@@ -48,15 +50,15 @@ struct PersistedSnapshot {
 
 pub struct StateSnapshotRepository<P> {
     provider: P,
-    db: DB,
+    db: Database,
     history: Mutex<HashMap<Address, Vec<PersistedSnapshot>>>,
 }
 
 impl<P: RpcProvider> StateSnapshotRepository<P> {
     pub fn open(provider: P, path: impl AsRef<Path>) -> Result<Self> {
-        let mut opts = Options::default();
-        opts.create_if_missing(true);
-        let db = DB::open(&opts, path).map_err(|e| Error::Other(e.to_string()))?;
+        let base = path.as_ref();
+        let db_path = if base.is_dir() { base.join("db.redb") } else { base.to_path_buf() };
+        let db = Database::create(db_path).map_err(|e| Error::Other(e.to_string()))?;
         Ok(Self { provider, db, history: Mutex::new(HashMap::new()) })
     }
 
@@ -96,7 +98,12 @@ impl<P: RpcProvider> StateSnapshotRepository<P> {
         };
         let key = Self::key(address, block_number, profile);
         let bytes = serde_json::to_vec(&entry).unwrap();
-        let _ = self.db.put(key.as_bytes(), bytes);
+        let mut txn = self.db.begin_write().unwrap();
+        {
+            let mut table = txn.open_table(SNAPSHOT_TABLE).unwrap();
+            let _ = table.insert(key.as_bytes(), bytes.as_slice());
+        }
+        txn.commit().unwrap();
 
         let mut h = self.history.lock();
         let hist = h.entry(address).or_default();
@@ -113,7 +120,13 @@ impl<P: RpcProvider> StateSnapshotRepository<P> {
                 entry_mut.volatility_flag = true;
                 let mut curr_entry = entry.clone();
                 curr_entry.snapshot = entry_mut.clone();
-                let _ = self.db.put(key.as_bytes(), serde_json::to_vec(&curr_entry).unwrap());
+                let mut tx2 = self.db.begin_write().unwrap();
+                {
+                    let mut table = tx2.open_table(SNAPSHOT_TABLE).unwrap();
+                    let data = serde_json::to_vec(&curr_entry).unwrap();
+                    let _ = table.insert(key.as_bytes(), data.as_slice());
+                }
+                tx2.commit().unwrap();
             }
         }
     }
@@ -130,14 +143,28 @@ impl<P: RpcProvider> StateSnapshotRepository<P> {
 
         for (target, origin) in dedup {
             let key = Self::key(target, block_number, profile);
-            if let Ok(Some(data)) = self.db.get(key.as_bytes()) {
-                if let Ok(saved) = serde_json::from_slice::<PersistedSnapshot>(&data) {
-                    if saved.block_hash == block_hash {
-                        continue;
-                    } else {
-                        let _ = self.db.delete(key.as_bytes());
+            let mut need_fetch = true;
+            {
+                let read_txn = self.db.begin_read().unwrap();
+                if let Ok(table) = read_txn.open_table(SNAPSHOT_TABLE) {
+                    if let Ok(Some(data)) = table.get(key.as_bytes()) {
+                        if let Ok(saved) = serde_json::from_slice::<PersistedSnapshot>(data.value()) {
+                            if saved.block_hash == block_hash {
+                                need_fetch = false;
+                            }
+                        }
                     }
                 }
+            }
+            if !need_fetch {
+                continue;
+            } else {
+                let mut tx = self.db.begin_write().unwrap();
+                {
+                    let mut table = tx.open_table(SNAPSHOT_TABLE).unwrap();
+                    let _ = table.remove(key.as_bytes());
+                }
+                tx.commit().unwrap();
             }
             let mut snap = self.fetch_v2_snapshot(target).await?;
             snap.state_lag_blocks = 1;
@@ -148,8 +175,10 @@ impl<P: RpcProvider> StateSnapshotRepository<P> {
 
     pub fn get_state(&self, address: Address, block_number: u64, profile: SnapshotProfile) -> Option<StateSnapshot> {
         let key = Self::key(address, block_number, profile);
-        match self.db.get(key.as_bytes()) {
-            Ok(Some(data)) => serde_json::from_slice::<PersistedSnapshot>(&data).ok().map(|e| e.snapshot),
+        let read_txn = self.db.begin_read().ok()?;
+        let table = read_txn.open_table(SNAPSHOT_TABLE).ok()?;
+        match table.get(key.as_bytes()) {
+            Ok(Some(data)) => serde_json::from_slice::<PersistedSnapshot>(data.value()).ok().map(|e| e.snapshot),
             _ => None,
         }
     }
@@ -366,8 +395,10 @@ mod tests {
         assert_eq!(provider.calls(), 1);
 
         let key = StateSnapshotRepository::<DummyProvider>::key(target, 1, SnapshotProfile::Basic);
-        let raw = repo.db.get(key.as_bytes()).unwrap().unwrap();
-        let entry: PersistedSnapshot = serde_json::from_slice(&raw).unwrap();
+        let read_txn = repo.db.begin_read().unwrap();
+        let table = read_txn.open_table(SNAPSHOT_TABLE).unwrap();
+        let raw = table.get(key.as_bytes()).unwrap().unwrap();
+        let entry: PersistedSnapshot = serde_json::from_slice(raw.value()).unwrap();
         assert_eq!(entry.group_origin.len(), 2);
     }
 }
