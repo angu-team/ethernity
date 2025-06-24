@@ -9,6 +9,10 @@ pub enum AttackType {
     Sandwich { justification: String },
     Spoof { justification: String },
     Backrun { justification: String },
+    CrossChain { justification: String },
+    FlashLoan { justification: String },
+    MultiToken { justification: String },
+    Layer2 { justification: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,6 +73,26 @@ impl AttackDetector {
 
         if let Some((_p, conf)) = self.detect_backrun(&txs) {
             attacks.push(AttackType::Backrun { justification: "backrun sequence".to_string() });
+            confidences.push(conf);
+        }
+
+        if let Some((_p, conf)) = self.detect_cross_chain(group) {
+            attacks.push(AttackType::CrossChain { justification: "cross-chain interaction".to_string() });
+            confidences.push(conf);
+        }
+
+        if let Some((_p, conf)) = self.detect_flash_loan(group) {
+            attacks.push(AttackType::FlashLoan { justification: "flash loan activity".to_string() });
+            confidences.push(conf);
+        }
+
+        if let Some((_p, conf)) = self.detect_multi_token(group) {
+            attacks.push(AttackType::MultiToken { justification: "multiple tokens".to_string() });
+            confidences.push(conf);
+        }
+
+        if let Some((_p, conf)) = self.detect_layer2(group) {
+            attacks.push(AttackType::Layer2 { justification: "layer2 mev".to_string() });
             confidences.push(conf);
         }
 
@@ -166,6 +190,46 @@ impl AttackDetector {
             if last.1 > avg_priority && txs.len() > 2 {
                 return Some((txs.iter().map(|(t, _)| t.tx_hash).collect(), 0.7));
             }
+        }
+        None
+    }
+
+    fn detect_cross_chain(&self, group: &TxGroup) -> Option<(Vec<TransactionHash>, f64)> {
+        let has_tag = group
+            .txs
+            .iter()
+            .any(|t| t.tags.iter().any(|tg| tg.contains("cross-chain") || tg.contains("bridge")));
+        if has_tag && group.token_paths.len() > 2 {
+            return Some((group.txs.iter().map(|t| t.tx_hash).collect(), 0.8));
+        }
+        None
+    }
+
+    fn detect_flash_loan(&self, group: &TxGroup) -> Option<(Vec<TransactionHash>, f64)> {
+        let has_tag = group
+            .txs
+            .iter()
+            .any(|t| t.tags.iter().any(|tg| tg.contains("flash-loan")));
+        if has_tag {
+            return Some((group.txs.iter().map(|t| t.tx_hash).collect(), 0.7));
+        }
+        None
+    }
+
+    fn detect_multi_token(&self, group: &TxGroup) -> Option<(Vec<TransactionHash>, f64)> {
+        if group.token_paths.len() >= 3 {
+            return Some((group.txs.iter().map(|t| t.tx_hash).collect(), 0.6));
+        }
+        None
+    }
+
+    fn detect_layer2(&self, group: &TxGroup) -> Option<(Vec<TransactionHash>, f64)> {
+        let has_tag = group
+            .txs
+            .iter()
+            .any(|t| t.tags.iter().any(|tg| tg.contains("l2") || tg.contains("optimism") || tg.contains("arbitrum")));
+        if has_tag {
+            return Some((group.txs.iter().map(|t| t.tx_hash).collect(), 0.75));
         }
         None
     }

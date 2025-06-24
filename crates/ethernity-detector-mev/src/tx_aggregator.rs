@@ -164,7 +164,15 @@ impl TxAggregator {
         if tx.targets.is_empty() {
             return false;
         }
-        let allowed = ["swap-v2", "swap-v3", "token-move", "router-call"];
+        let allowed = [
+            "swap-v2",
+            "swap-v3",
+            "token-move",
+            "router-call",
+            "flash-loan",
+            "cross-chain",
+            "l2",
+        ];
         tx.tags.iter().any(|t| allowed.contains(&t.as_str()))
     }
 

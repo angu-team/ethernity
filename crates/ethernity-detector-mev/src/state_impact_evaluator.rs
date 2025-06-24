@@ -70,12 +70,20 @@ pub trait CurveModel: Send + Sync {
     }
 }
 
-#[derive(Debug, Default, Clone)]
-pub struct ConstantProductCurve;
+#[derive(Debug, Clone)]
+pub struct ConstantProductCurve {
+    pub fee: f64,
+}
+
+impl Default for ConstantProductCurve {
+    fn default() -> Self {
+        Self { fee: 0.003 }
+    }
+}
 
 impl CurveModel for ConstantProductCurve {
     fn expected_out(&self, amount_in: f64, snapshot: &StateSnapshot) -> f64 {
-        StateImpactEvaluator::expected_out_v2(amount_in, snapshot.reserve_in, snapshot.reserve_out)
+        StateImpactEvaluator::expected_out_v2(amount_in, snapshot.reserve_in, snapshot.reserve_out, self.fee)
     }
 
     fn apply_trade(&self, amount_in: f64, snapshot: &mut StateSnapshot) {
@@ -110,7 +118,7 @@ impl Default for ImpactModelParams {
             liquidity: 1.0,
             slippage_curve: 3.0,
             convexity: 0.5,
-            curve_model: Arc::new(ConstantProductCurve),
+            curve_model: Arc::new(ConstantProductCurve::default()),
             lightweight_simulation: false,
         }
     }
@@ -241,7 +249,7 @@ impl StateImpactEvaluator {
         else { PoolType::Unknown }
     }
 
-    fn expected_out_v2(amount_in: f64, reserve_in: f64, reserve_out: f64) -> f64 {
+    fn expected_out_v2(amount_in: f64, reserve_in: f64, reserve_out: f64, fee: f64) -> f64 {
         if reserve_in <= 0.0
             || reserve_out <= 0.0
             || amount_in <= 0.0
@@ -252,12 +260,13 @@ impl StateImpactEvaluator {
             return 0.0;
         }
 
-        let denom = reserve_in * 1000.0 + amount_in * 997.0;
+        let fee_mul = 1.0 - fee;
+        let denom = reserve_in + amount_in * fee_mul;
         if !denom.is_finite() || denom <= 0.0 {
             return 0.0;
         }
 
-        let out = (amount_in * 997.0 * reserve_out) / denom;
+        let out = (amount_in * fee_mul * reserve_out) / denom;
         if out.is_finite() && out >= 0.0 { out } else { 0.0 }
     }
 
