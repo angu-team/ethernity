@@ -1,4 +1,4 @@
-use ethernity_detector_mev::{traits::{StateProvider, TransactionClassifier, ImpactModel, TagPrediction}, AnnotatedTx, TxGroup, VictimInput, StateSnapshot, GroupImpact};
+use ethernity_detector_mev::{StateProvider, TransactionClassifier, ImpactModel, TagPrediction, AnnotatedTx, TxGroup, VictimInput, StateSnapshot, GroupImpact};
 use ethernity_core::error::{Result, Error};
 use ethernity_core::types::TransactionHash;
 use ethereum_types::{Address, H256, U256};
@@ -41,7 +41,7 @@ impl TransactionClassifier for MockClassifier {
 struct MockImpactModel;
 
 impl ImpactModel for MockImpactModel {
-    fn evaluate_group(&self, group: &TxGroup, _victims: &[VictimInput], _snapshot: &StateSnapshot) -> GroupImpact {
+    fn evaluate_group(&mut self, group: &TxGroup, _victims: &[VictimInput], _snapshot: &StateSnapshot) -> GroupImpact {
         GroupImpact {
             group_id: group.group_key,
             tokens: group.token_paths.clone(),

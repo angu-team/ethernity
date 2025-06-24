@@ -61,7 +61,13 @@ impl<P: RpcProvider + Clone> MempoolSupervisor<P> {
     pub fn new(provider: P, min_tx_count: usize, dt_max: Duration, max_active_groups: usize) -> Self {
         Self {
             tagger: TxNatureTagger::new(provider.clone()),
-            state_manager: StateSnapshotRepository::open(provider.clone(), "snapshot_db").expect("db"),
+            state_manager: {
+                let ts = chrono::Utc::now().timestamp_nanos();
+                let dir = format!("snapshot_db_{}", ts);
+                std::fs::create_dir_all(&dir).ok();
+                let path = format!("{}/db.redb", dir);
+                StateSnapshotRepository::open(provider.clone(), path).expect("db")
+            },
             aggregator: TxAggregator::new(),
             buffer: DashMap::new(),
             provider,

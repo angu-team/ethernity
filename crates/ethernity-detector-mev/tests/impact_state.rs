@@ -117,7 +117,7 @@ fn slippage_tolerated_and_adjusted() {
     let mut params = ImpactModelParams::default();
     params.curve_model = Arc::new(ConstantProductCurve::default());
     let sc = params.slippage_curve;
-    let ev = StateImpactEvaluator::new(params);
+    let mut ev = StateImpactEvaluator::new(params);
 
     let victims = vec![VictimInput {
         tx_hash: H256::repeat_byte(0x11),
@@ -126,7 +126,7 @@ fn slippage_tolerated_and_adjusted() {
         token_behavior_unknown: false,
     }];
     let snap = default_snapshot();
-    let res = ImpactModel::evaluate_group(&ev, group, &victims, &snap);
+    let res = ImpactModel::evaluate_group(&mut ev, group, &victims, &snap);
     let victim = &res.victims[0];
     let expected = (100.0 * 997.0 * 1000.0) / (1000.0 * 1000.0 + 100.0 * 997.0);
     let slippage = ((expected - 90.0) / expected) * 100.0;
@@ -153,12 +153,12 @@ fn dynamic_vs_static_baseline() {
     let mut params = ImpactModelParams::default();
     params.curve_model = Arc::new(ConstantProductCurve::default());
     let sc = params.slippage_curve;
-    let ev = StateImpactEvaluator::new(params);
+    let mut ev = StateImpactEvaluator::new(params);
     let victims = vec![VictimInput { tx_hash: H256::zero(), amount_in: 50.0, amount_out_min: 45.0, token_behavior_unknown: false }];
     let snap = default_snapshot();
-    let res1 = ImpactModel::evaluate_group(&ev, group, &victims, &snap);
+    let res1 = ImpactModel::evaluate_group(&mut ev, group, &victims, &snap);
     let baseline1 = res1.victims[0].slippage_baseline;
-    let res2 = ImpactModel::evaluate_group(&ev, group, &victims, &snap);
+    let res2 = ImpactModel::evaluate_group(&mut ev, group, &victims, &snap);
     let baseline2 = res2.victims[0].slippage_baseline;
     assert_eq!(baseline1, sc);
     assert_ne!(baseline2, sc);
@@ -183,13 +183,13 @@ fn opportunity_score_penalty_with_convexity() {
     let (aggr, key) = make_group(vec!["swap-v2".into()]);
     let group = aggr.groups().get(&key).unwrap();
     let params = ImpactModelParams { curve_model: Arc::new(ConstantProductCurve), ..Default::default() };
-    let ev = StateImpactEvaluator::new(params);
+    let mut ev = StateImpactEvaluator::new(params);
     let victims = vec![
         VictimInput { tx_hash: H256::repeat_byte(0x01), amount_in: 100.0, amount_out_min: 90.0, token_behavior_unknown: false },
         VictimInput { tx_hash: H256::repeat_byte(0x02), amount_in: 50.0, amount_out_min: 40.0, token_behavior_unknown: false },
     ];
     let snap = default_snapshot();
-    let res = ImpactModel::evaluate_group(&ev, group, &victims, &snap);
+    let res = ImpactModel::evaluate_group(&mut ev, group, &victims, &snap);
     assert!(res.opportunity_score < 0.9);
 }
 
@@ -200,13 +200,13 @@ fn multiple_victims_lightweight_simulation() {
     let mut params = ImpactModelParams::default();
     params.curve_model = Arc::new(ConstantProductCurve);
     params.lightweight_simulation = true;
-    let ev = StateImpactEvaluator::new(params);
+    let mut ev = StateImpactEvaluator::new(params);
     let victims = vec![
         VictimInput { tx_hash: H256::repeat_byte(0x01), amount_in: 100.0, amount_out_min: 90.0, token_behavior_unknown: false },
         VictimInput { tx_hash: H256::repeat_byte(0x02), amount_in: 100.0, amount_out_min: 90.0, token_behavior_unknown: false },
     ];
     let snap = default_snapshot();
-    let res = ImpactModel::evaluate_group(&ev, group, &victims, &snap);
+    let res = ImpactModel::evaluate_group(&mut ev, group, &victims, &snap);
     assert!(res.victims[1].expected_amount_out < res.victims[0].expected_amount_out);
     let profit = (res.victims[0].expected_amount_out - 90.0)
         + (res.victims[1].expected_amount_out - 90.0);
