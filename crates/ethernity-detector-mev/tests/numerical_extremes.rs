@@ -43,7 +43,7 @@ fn constant_product_precision_limits() {
         volatility_flag: false,
     };
     let mut params = ImpactModelParams::default();
-    params.curve_model = Arc::new(ConstantProductCurve);
+    params.curve_model = Arc::new(ConstantProductCurve::default());
     let mut ev = StateImpactEvaluator::new(params);
     let res = ImpactModel::evaluate_group(&mut ev, group, &victims, &snapshot);
     let out = res.victims[0].expected_amount_out;
@@ -72,7 +72,7 @@ fn multiplication_overflow_v2() {
         volatility_flag: false,
     };
     let mut params = ImpactModelParams::default();
-    params.curve_model = Arc::new(ConstantProductCurve);
+    params.curve_model = Arc::new(ConstantProductCurve::default());
     let mut ev = StateImpactEvaluator::new(params);
     let res = ImpactModel::evaluate_group(&mut ev, group, &victims, &snapshot);
     assert_eq!(res.victims[0].expected_amount_out, 0.0);
@@ -99,7 +99,7 @@ fn slippage_with_tiny_reserves() {
         volatility_flag: false,
     };
     let mut params = ImpactModelParams::default();
-    params.curve_model = Arc::new(ConstantProductCurve);
+    params.curve_model = Arc::new(ConstantProductCurve::default());
     let mut ev = StateImpactEvaluator::new(params);
     let res = ImpactModel::evaluate_group(&mut ev, group, &victims, &snapshot);
     let slip = res.victims[0].slippage_tolerated;
@@ -126,12 +126,12 @@ fn precision_multiple_victims_high_precision() {
         volatility_flag: false,
     };
     let mut params = ImpactModelParams::default();
-    params.curve_model = Arc::new(ConstantProductCurve);
+    params.curve_model = Arc::new(ConstantProductCurve::default());
     params.lightweight_simulation = true;
     let mut ev = StateImpactEvaluator::new(params);
     let result = ImpactModel::evaluate_group(&mut ev, group, &victims, &snapshot);
     let mut expected_profit = 0.0;
-    let curve = ConstantProductCurve;
+    let curve = ConstantProductCurve::default();
     let mut snap = snapshot.clone();
     for (i, v) in victims.iter().enumerate() {
         let out = curve.expected_out(v.amount_in, &snap);

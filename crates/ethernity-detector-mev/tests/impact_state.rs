@@ -183,7 +183,7 @@ fn state_confidence_and_impact_certainty() {
 fn opportunity_score_penalty_with_convexity() {
     let (aggr, key) = make_group(vec!["swap-v2".into()]);
     let group = aggr.groups().get(&key).unwrap();
-    let params = ImpactModelParams { curve_model: Arc::new(ConstantProductCurve), ..Default::default() };
+    let params = ImpactModelParams { curve_model: Arc::new(ConstantProductCurve::default()), ..Default::default() };
     let mut ev = StateImpactEvaluator::new(params);
     let victims = vec![
         VictimInput { tx_hash: H256::repeat_byte(0x01), amount_in: 100.0, amount_out_min: 90.0, token_behavior_unknown: false, flash_loan_amount: None },
@@ -199,7 +199,7 @@ fn multiple_victims_lightweight_simulation() {
     let (aggr, key) = make_group(vec!["swap-v2".into()]);
     let group = aggr.groups().get(&key).unwrap();
     let mut params = ImpactModelParams::default();
-    params.curve_model = Arc::new(ConstantProductCurve);
+    params.curve_model = Arc::new(ConstantProductCurve::default());
     params.lightweight_simulation = true;
     let mut ev = StateImpactEvaluator::new(params);
     let victims = vec![
@@ -238,7 +238,7 @@ fn flash_loan_impact_detection() {
     let (aggr, key) = make_group(vec!["swap-v2".into()]);
     let group = aggr.groups().get(&key).unwrap();
     let params = ImpactModelParams {
-        curve_model: Arc::new(ConstantProductCurve),
+        curve_model: Arc::new(ConstantProductCurve::default()),
         lightweight_simulation: true,
         ..Default::default()
     };
@@ -267,3 +267,73 @@ fn flash_loan_impact_detection() {
     assert!((res.opportunity_score - 0.95).abs() < 1e-6);
 }
 
+#[test]
+fn zero_liquidity_pool_returns_zero() {
+    let (aggr, key) = make_group(vec!["swap-v2".into()]);
+    let group = aggr.groups().get(&key).unwrap();
+    let victims = vec![VictimInput {
+        tx_hash: H256::zero(),
+        amount_in: 100.0,
+        amount_out_min: 0.0,
+        token_behavior_unknown: false,
+        flash_loan_amount: None,
+    }];
+    let snapshot = StateSnapshot {
+        reserve_in: 0.0,
+        reserve_out: 0.0,
+        sqrt_price_x96: None,
+        liquidity: None,
+        state_lag_blocks: 0,
+        reorg_risk_level: "low".into(),
+        volatility_flag: false,
+    };
+    let mut ev = StateImpactEvaluator::default();
+    let res = ImpactModel::evaluate_group(&mut ev, group, &victims, &snapshot);
+    assert_eq!(res.victims[0].expected_amount_out, 0.0);
+}
+
+#[test]
+fn high_volatility_penalizes_confidence() {
+    let (aggr, key) = make_group(vec!["swap-v2".into()]);
+    let group = aggr.groups().get(&key).unwrap();
+    let victims = vec![VictimInput { tx_hash: H256::zero(), amount_in: 100.0, amount_out_min: 90.0, token_behavior_unknown: false, flash_loan_amount: None }];
+    let mut snap = default_snapshot();
+    snap.volatility_flag = true;
+    let res = StateImpactEvaluator::evaluate(group, &victims, &snap);
+    assert!(res.state_confidence < 1.0);
+}
+
+#[test]
+fn dynamic_fee_impact() {
+    let (aggr, key) = make_group(vec!["swap-v2".into()]);
+    let group = aggr.groups().get(&key).unwrap();
+    let curve = ConstantProductCurve { fee_rate: 0.005 };
+    let params = ImpactModelParams { curve_model: Arc::new(curve), ..Default::default() };
+    let mut ev = StateImpactEvaluator::new(params);
+    let victims = vec![VictimInput { tx_hash: H256::zero(), amount_in: 100.0, amount_out_min: 95.0, token_behavior_unknown: false, flash_loan_amount: None }];
+    let snap = default_snapshot();
+    let res = ImpactModel::evaluate_group(&mut ev, group, &victims, &snap);
+    let fee_mul = 1.0 - 0.005;
+    let denom = snap.reserve_in + 100.0 * fee_mul;
+    let expected = 100.0 * fee_mul * snap.reserve_out / denom;
+    assert!((res.victims[0].expected_amount_out - expected).abs() < 1e-6);
+}
+
+#[tokio::test]
+async fn process_stream_multiple_pools() {
+    let (aggr, key) = make_group(vec!["swap-v2".into()]);
+    let group = aggr.groups().get(&key).unwrap().clone();
+    let snapshot = default_snapshot();
+    let mut map = HashMap::new();
+    map.insert(Address::repeat_byte(0xaa), snapshot.clone());
+    map.insert(Address::repeat_byte(0xbb), snapshot);
+    let (tx_in, rx_in) = mpsc::channel(2);
+    let (tx_out, mut rx_out) = mpsc::channel(2);
+    tokio::spawn(async move { StateImpactEvaluator::process_stream(rx_in, tx_out).await; });
+    tx_in.send(SnapshotEvent { group: group.clone(), snapshots: map }).await.unwrap();
+    drop(tx_in);
+    let ev1 = rx_out.recv().await.expect("ev1");
+    let ev2 = rx_out.recv().await.expect("ev2");
+    assert_eq!(ev1.group.group_key, group.group_key);
+    assert_eq!(ev2.group.group_key, group.group_key);
+}

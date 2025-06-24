@@ -44,7 +44,7 @@ fn constant_product_low_liquidity() {
         volatility_flag: false,
     };
     let mut params = ImpactModelParams::default();
-    params.curve_model = Arc::new(ConstantProductCurve);
+    params.curve_model = Arc::new(ConstantProductCurve::default());
     let mut ev = StateImpactEvaluator::new(params);
     let res = ImpactModel::evaluate_group(&mut ev, group, &victims, &snapshot);
     let out = res.victims[0].expected_amount_out;
@@ -73,7 +73,7 @@ fn constant_product_high_liquidity() {
         volatility_flag: false,
     };
     let mut params = ImpactModelParams::default();
-    params.curve_model = Arc::new(ConstantProductCurve);
+    params.curve_model = Arc::new(ConstantProductCurve::default());
     let mut ev = StateImpactEvaluator::new(params);
     let res = ImpactModel::evaluate_group(&mut ev, group, &victims, &snapshot);
     let out = res.victims[0].expected_amount_out;
@@ -131,7 +131,7 @@ fn numerical_stability_extreme_values() {
         volatility_flag: false,
     };
     let mut params = ImpactModelParams::default();
-    params.curve_model = Arc::new(ConstantProductCurve);
+    params.curve_model = Arc::new(ConstantProductCurve::default());
     let mut ev = StateImpactEvaluator::new(params);
     let res = ImpactModel::evaluate_group(&mut ev, group, &victims, &snapshot);
     let out = res.victims[0].expected_amount_out;
@@ -140,7 +140,7 @@ fn numerical_stability_extreme_values() {
 }
 #[test]
 fn mathematical_edge_cases_comprehensive() {
-    let curve = ConstantProductCurve;
+    let curve = ConstantProductCurve::default();
     let reserves_in = [0.0, 1e-300, f64::MIN_POSITIVE, f64::MAX];
     let amounts_in = [0.0, f64::MAX, -1.0];
 
