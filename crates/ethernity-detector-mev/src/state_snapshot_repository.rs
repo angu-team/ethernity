@@ -6,10 +6,12 @@ use ethereum_types::{Address, H256, U256};
 use redb::{Database, TableDefinition};
 
 const SNAPSHOT_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("snapshots");
+const META_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("metadata");
+const SCHEMA_VERSION: u32 = 1;
 use parking_lot::Mutex;
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SnapshotProfile {
@@ -51,6 +53,7 @@ struct PersistedSnapshot {
 pub struct StateSnapshotRepository<P> {
     provider: P,
     db: Database,
+    path: std::path::PathBuf,
     history: Mutex<HashMap<Address, Vec<PersistedSnapshot>>>,
 }
 
@@ -58,8 +61,47 @@ impl<P: RpcProvider> StateSnapshotRepository<P> {
     pub fn open(provider: P, path: impl AsRef<Path>) -> Result<Self> {
         let base = path.as_ref();
         let db_path = if base.is_dir() { base.join("db.redb") } else { base.to_path_buf() };
-        let db = Database::create(db_path).map_err(|e| Error::Other(e.to_string()))?;
-        Ok(Self { provider, db, history: Mutex::new(HashMap::new()) })
+
+        if db_path.exists() {
+            let db_tmp = Database::open(&db_path).map_err(|e| Error::Other(e.to_string()))?;
+            if let Some(ver) = Self::read_schema_version(&db_tmp)? {
+                if ver != SCHEMA_VERSION {
+                    drop(db_tmp);
+                    std::fs::remove_file(&db_path).map_err(|e| Error::Other(e.to_string()))?;
+                }
+            }
+        }
+
+        let db = Database::create(&db_path).map_err(|e| Error::Other(e.to_string()))?;
+        let repo = Self { provider, db, path: db_path, history: Mutex::new(HashMap::new()) };
+        repo.init_metadata()?;
+        Ok(repo)
+    }
+
+    fn read_schema_version(db: &Database) -> Result<Option<u32>> {
+        let read = db.begin_read().map_err(|e| Error::Other(e.to_string()))?;
+        if let Ok(table) = read.open_table(META_TABLE) {
+            if let Ok(Some(raw)) = table.get("schema_version".as_bytes()) {
+                let v = raw.value();
+                if v.len() >= 4 {
+                    let mut arr = [0u8;4];
+                    arr.copy_from_slice(&v[..4]);
+                    return Ok(Some(u32::from_le_bytes(arr)));
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    fn init_metadata(&self) -> Result<()> {
+        let mut tx = self.db.begin_write().map_err(|e| Error::Other(e.to_string()))?;
+        {
+            let mut table = tx.open_table(META_TABLE).unwrap();
+            let bytes = SCHEMA_VERSION.to_le_bytes();
+            table.insert("schema_version".as_bytes(), &bytes[..]).ok();
+        }
+        tx.commit().map_err(|e| Error::Other(e.to_string()))?;
+        Ok(())
     }
 
     fn key(address: Address, block_number: u64, profile: SnapshotProfile) -> String {
@@ -87,7 +129,14 @@ impl<P: RpcProvider> StateSnapshotRepository<P> {
         })
     }
 
+    fn validate_snapshot(s: &StateSnapshot) -> bool {
+        s.reserve_in >= 0.0 && s.reserve_out >= 0.0
+    }
+
     fn store_snapshot(&self, address: Address, block_number: u64, block_hash: H256, profile: SnapshotProfile, snapshot: StateSnapshot, origin: Vec<H256>) {
+        if !Self::validate_snapshot(&snapshot) {
+            return;
+        }
         let entry = PersistedSnapshot {
             snapshot: snapshot.clone(),
             block_number,
@@ -181,6 +230,21 @@ impl<P: RpcProvider> StateSnapshotRepository<P> {
             Ok(Some(data)) => serde_json::from_slice::<PersistedSnapshot>(data.value()).ok().map(|e| e.snapshot),
             _ => None,
         }
+    }
+
+    pub fn backup(&self, dest: impl AsRef<Path>) -> Result<()> {
+        std::fs::create_dir_all(&dest).map_err(|e| Error::Other(e.to_string()))?;
+        let target = dest.as_ref().join("db.redb");
+        std::fs::copy(&self.path, target).map_err(|e| Error::Other(e.to_string()))?;
+        Ok(())
+    }
+
+    pub fn restore(provider: P, src: impl AsRef<Path>, dest: impl AsRef<Path>) -> Result<Self> {
+        let src_file = if src.as_ref().is_dir() { src.as_ref().join("db.redb") } else { src.as_ref().to_path_buf() };
+        let dest_file = if dest.as_ref().is_dir() { dest.as_ref().join("db.redb") } else { dest.as_ref().to_path_buf() };
+        std::fs::create_dir_all(dest.as_ref()).map_err(|e| Error::Other(e.to_string()))?;
+        std::fs::copy(src_file, &dest_file).map_err(|e| Error::Other(e.to_string()))?;
+        Self::open(provider, dest)
     }
 }
 
@@ -514,5 +578,61 @@ mod tests {
         let raw = table.get(key.as_bytes()).unwrap().unwrap();
         let entry: PersistedSnapshot = serde_json::from_slice(raw.value()).unwrap();
         assert!(entry.snapshot.reserve_in == 1000.0 || entry.snapshot.reserve_in == 2000.0);
+    }
+
+    #[test]
+    fn invalid_snapshot_rejected() {
+        let dir = TempDir::new().unwrap();
+        let provider = DummyProvider::default();
+        let repo = StateSnapshotRepository::open(provider, dir.path()).unwrap();
+        let bad = StateSnapshot {
+            reserve_in: -1.0,
+            reserve_out: 0.0,
+            sqrt_price_x96: None,
+            liquidity: None,
+            state_lag_blocks: 0,
+            reorg_risk_level: "low".into(),
+            volatility_flag: false,
+        };
+        repo.store_snapshot(Address::zero(), 1, H256::zero(), SnapshotProfile::Basic, bad, vec![]);
+        assert!(repo.get_state(Address::zero(), 1, SnapshotProfile::Basic).is_none());
+    }
+
+    #[test]
+    fn schema_migration_resets_data() {
+        let dir = TempDir::new().unwrap();
+        let provider = DummyProvider::default();
+        let repo = StateSnapshotRepository::open(provider.clone(), dir.path()).unwrap();
+        repo.store_snapshot(Address::zero(), 1, H256::zero(), SnapshotProfile::Basic,
+            StateSnapshot { reserve_in: 1.0, reserve_out: 1.0, sqrt_price_x96: None, liquidity: None, state_lag_blocks:0, reorg_risk_level: "low".into(), volatility_flag: false }, vec![]);
+        drop(repo);
+
+        let db_path = dir.path().join("db.redb");
+        let db = Database::open(&db_path).unwrap();
+        let mut tx = db.begin_write().unwrap();
+        {
+            let mut table = tx.open_table(META_TABLE).unwrap();
+            let zero = 0u32.to_le_bytes();
+            table.insert("schema_version".as_bytes(), &zero[..]).unwrap();
+        }
+        tx.commit().unwrap();
+        drop(db);
+
+        let repo = StateSnapshotRepository::open(provider, dir.path()).unwrap();
+        assert!(repo.get_state(Address::zero(), 1, SnapshotProfile::Basic).is_none());
+    }
+
+    #[test]
+    fn backup_and_restore_cycle() {
+        let dir = TempDir::new().unwrap();
+        let backup = TempDir::new().unwrap();
+        let provider = DummyProvider::default();
+        let repo = StateSnapshotRepository::open(provider.clone(), dir.path()).unwrap();
+        repo.store_snapshot(Address::zero(), 1, H256::zero(), SnapshotProfile::Basic,
+            StateSnapshot { reserve_in: 1.0, reserve_out: 1.0, sqrt_price_x96: None, liquidity: None, state_lag_blocks:0, reorg_risk_level: "low".into(), volatility_flag: false }, vec![]);
+        repo.backup(backup.path()).unwrap();
+        std::fs::remove_file(dir.path().join("db.redb")).unwrap();
+        let restored = StateSnapshotRepository::restore(provider, backup.path(), dir.path()).unwrap();
+        assert!(restored.get_state(Address::zero(), 1, SnapshotProfile::Basic).is_some());
     }
 }
