@@ -105,3 +105,31 @@ fn uniswap_v3_extreme_price() {
     assert!(out.is_finite());
     assert!(out >= 0.0);
 }
+
+#[test]
+fn numerical_stability_extreme_values() {
+    let (aggr, key) = make_group("swap-v2");
+    let group = aggr.groups().get(&key).unwrap();
+    let victims = vec![VictimInput {
+        tx_hash: H256::zero(),
+        amount_in: f64::MAX,
+        amount_out_min: 0.0,
+        token_behavior_unknown: false,
+    }];
+    let snapshot = StateSnapshot {
+        reserve_in: 1e-18,
+        reserve_out: 1e-18,
+        sqrt_price_x96: None,
+        liquidity: None,
+        state_lag_blocks: 0,
+        reorg_risk_level: "low".into(),
+        volatility_flag: false,
+    };
+    let mut params = ImpactModelParams::default();
+    params.curve_model = Arc::new(ConstantProductCurve);
+    let mut ev = StateImpactEvaluator::new(params);
+    let res = ImpactModel::evaluate_group(&mut ev, group, &victims, &snapshot);
+    let out = res.victims[0].expected_amount_out;
+    assert!(out.is_finite());
+    assert!(out >= 0.0);
+}
