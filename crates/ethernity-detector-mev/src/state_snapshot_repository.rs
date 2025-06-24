@@ -3,7 +3,7 @@ use crate::tx_aggregator::TxGroup;
 use ethernity_core::error::{Error, Result};
 use ethernity_core::traits::RpcProvider;
 use ethereum_types::{Address, H256, U256};
-use rocksdb::{DB, Options};
+use speedb::{DB, Options};
 use parking_lot::Mutex;
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;

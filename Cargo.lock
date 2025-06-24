@@ -1088,9 +1088,9 @@ dependencies = [
  "hex",
  "lru 0.10.1",
  "parking_lot",
- "rocksdb",
  "serde",
  "serde_json",
+ "speedb",
  "tempfile",
  "tiny-keccak",
  "tokio",
@@ -2365,10 +2365,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "librocksdb-sys"
-version = "0.11.0+8.1.1"
+name = "libspeedb-sys"
+version = "0.0.5+2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3386f101bcb4bd252d8e9d2fb41ec3b0862a15a62b478c355b2982efa469e3e"
+checksum = "2973ec08b878ea939c7a1280792c32742a6c7c1838ba1c067ef6239709b7da43"
 dependencies = [
  "bindgen 0.65.1",
  "bzip2-sys",
@@ -3415,16 +3415,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rocksdb"
-version = "0.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb6f170a4041d50a0ce04b0d2e14916d6ca863ea2e422689a5b694395d299ffe"
-dependencies = [
- "libc",
- "librocksdb-sys",
-]
-
-[[package]]
 name = "rustc-demangle"
 version = "0.1.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3878,6 +3868,16 @@ dependencies = [
  "phf",
  "thiserror 1.0.69",
  "unicode-xid",
+]
+
+[[package]]
+name = "speedb"
+version = "0.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f60dc0d8eeb0572590e5ca855bfe33861ebdcbcf92f464672d7746c768e1555a"
+dependencies = [
+ "libc",
+ "libspeedb-sys",
 ]
 
 [[package]]

@@ -18,7 +18,7 @@ serde = { workspace = true, features = ["derive"] }
 chrono = { workspace = true }
 dashmap = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
-rocksdb = { workspace = true }
+speedb = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
