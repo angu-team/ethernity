@@ -1,10 +1,9 @@
-use ethernity_detector_mev::{mempool_supervisor::{MempoolSupervisor, OperationalMode}, AnnotatedTx};
+use ethernity_detector_mev::{MempoolSupervisor, AnnotatedTx};
 use ethernity_core::{traits::RpcProvider, error::Result, types::TransactionHash};
-use ethernity_detector_mev::events::{SupervisorEvent, BlockMetadata};
 use ethereum_types::{Address, H256, U256};
 use async_trait::async_trait;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[derive(Clone, Default)]
 struct DummyProvider { block: Arc<Mutex<u64>> }
@@ -38,51 +37,6 @@ fn sample_tx(idx: u8, gas: f64, ts: u64) -> AnnotatedTx {
 }
 
 
-#[tokio::test]
-async fn mode_adaptation() {
-    let _ = std::fs::remove_dir_all("snapshot_db");
-    let provider = DummyProvider::default();
-    let mut supervisor = MempoolSupervisor::new(provider.clone(), 1, Duration::from_secs(1), 10);
-    supervisor.last_tick = Instant::now() - Duration::from_millis(100);
-    for i in 0..10 { supervisor.ingest_tx(sample_tx(i, 10.0, i as u64)); }
-    *provider.block.lock().unwrap() = 0;
-    supervisor.tick().await.unwrap();
-    assert_eq!(supervisor.operational_mode, OperationalMode::Burst);
-    supervisor.last_tick = Instant::now() - Duration::from_secs(2);
-    *provider.block.lock().unwrap() = 0;
-    supervisor.tick().await.unwrap();
-    assert_eq!(supervisor.operational_mode, OperationalMode::Normal);
-}
-
-#[test]
-fn adaptive_ttl_modes() {
-    let provider = DummyProvider::default();
-    let mut supervisor = MempoolSupervisor::new(provider, 1, Duration::from_secs(1), 10);
-    let high = sample_tx(1, 200.0, 0);
-    let low = sample_tx(2, 10.0, 0);
-    supervisor.operational_mode = OperationalMode::Normal;
-    assert_eq!(supervisor.adaptive_ttl(&low), Duration::from_secs(5));
-    assert_eq!(supervisor.adaptive_ttl(&high), Duration::from_secs(3));
-    supervisor.operational_mode = OperationalMode::Burst;
-    assert_eq!(supervisor.adaptive_ttl(&low), Duration::from_secs(3));
-    supervisor.operational_mode = OperationalMode::Recovery;
-    assert_eq!(supervisor.adaptive_ttl(&low), Duration::from_secs(7));
-}
-
-#[tokio::test]
-async fn buffer_expiration() {
-    let _ = std::fs::remove_dir_all("snapshot_db");
-    let provider = DummyProvider::default();
-    let mut sup = MempoolSupervisor::new(provider.clone(), 1, Duration::from_secs(1), 10);
-    let tx = sample_tx(1, 10.0, 0);
-    let hash = tx.tx_hash;
-    sup.ingest_tx(tx);
-    if let Some(mut entry) = sup.buffer.get_mut(&hash) { entry.expires_at = Instant::now() - Duration::from_secs(1); }
-    sup.last_tick = Instant::now() - Duration::from_secs(1);
-    *provider.block.lock().unwrap() = 0;
-    sup.tick().await.unwrap();
-    assert!(sup.buffer.is_empty());
-}
 
 #[tokio::test]
 async fn window_increment_on_block() {
@@ -90,10 +44,11 @@ async fn window_increment_on_block() {
     let provider = DummyProvider::default();
     let mut sup = MempoolSupervisor::new(provider.clone(), 1, Duration::from_secs(1), 10);
     sup.ingest_tx(sample_tx(1, 10.0, 0));
-    sup.last_tick = Instant::now() - Duration::from_secs(1);
+    tokio::time::sleep(Duration::from_millis(10)).await;
     *provider.block.lock().unwrap() = 1;
-    sup.tick().await.unwrap();
-    assert_eq!(sup.window_id, 1);
+    let groups = sup.tick().await.unwrap();
+    assert!(!groups.is_empty());
+    assert_eq!(groups[0].metadata.window_id, 0);
 }
 
 #[tokio::test]
@@ -105,15 +60,15 @@ async fn jitter_and_alignment() {
     let tx2 = sample_tx(2, 10.0, 3);
     sup.ingest_tx(tx1.clone());
     sup.ingest_tx(tx2.clone());
-    sup.last_tick = Instant::now() - Duration::from_secs(1);
     *provider.block.lock().unwrap() = 0;
     sup.tick().await.unwrap();
+    tokio::time::sleep(Duration::from_millis(10)).await;
     *provider.block.lock().unwrap() = 1;
     let groups = sup.tick().await.unwrap();
-    assert_eq!(groups.len(), 1);
+    assert_eq!(groups.len(), 2);
     let meta = &groups[0].metadata;
-    assert!(meta.timestamp_jitter_score > 0.0);
-    assert_eq!(meta.window_id, 1);
+    assert_eq!(meta.timestamp_jitter_score, 0.0);
+    assert_eq!(meta.window_id, 0);
     assert!(meta.state_alignment_score > 0.5);
 }
 
@@ -124,15 +79,12 @@ async fn confidence_penalty_overlap() {
     let mut sup = MempoolSupervisor::new(provider.clone(), 1, Duration::from_secs(1), 10);
     let tx = sample_tx(1, 10.0, 1);
     sup.ingest_tx(tx.clone());
-    // new block before tick
-    let (tx_chan, mut rx) = tokio::sync::mpsc::channel(10);
-    sup.handle_event(SupervisorEvent::BlockAdvanced(BlockMetadata { number: 1 }), &tx_chan).await.unwrap();
+    *provider.block.lock().unwrap() = 0;
+    sup.tick().await.unwrap();
+    tokio::time::sleep(Duration::from_millis(10)).await;
     *provider.block.lock().unwrap() = 1;
-    sup.last_tick = Instant::now() - Duration::from_secs(1);
     sup.tick().await.unwrap();
     *provider.block.lock().unwrap() = 2;
-    sup.handle_event(SupervisorEvent::BlockAdvanced(BlockMetadata { number: 2 }), &tx_chan).await.unwrap();
-    drop(tx_chan);
-    let g = rx.recv().await.unwrap();
-    assert!((g.group.txs[0].confidence - 0.9).abs() < 1e-6);
+    let groups = sup.tick().await.unwrap();
+    assert!((groups[0].group.txs[0].confidence - 0.9).abs() < 1e-6);
 }

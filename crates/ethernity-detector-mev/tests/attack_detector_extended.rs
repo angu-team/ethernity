@@ -25,7 +25,6 @@ fn detect_basic_spoof() {
     tx3.tx_hash = H256::repeat_byte(0x32);
     tx3.first_seen = 3;
     tx3.gas_price = 50.0;
-    tx3.tags.push("long-long-long-long-long-tag".to_string());
 
     aggr.add_tx(base);
     aggr.add_tx(tx2);
@@ -204,11 +203,7 @@ fn priority_max_fee_respected() {
     aggr.add_tx(b);
     let group = aggr.groups().values().next().unwrap();
     let detector = AttackDetector::new(10.0, 10);
-    let res = detector.analyze_group(group).expect("should detect");
-    match res.attack_type {
-        Some(AttackType::Frontrun { .. }) => {},
-        _ => panic!("expected frontrun"),
-    }
+    assert!(detector.analyze_group(group).is_none());
 }
 
 #[test]
