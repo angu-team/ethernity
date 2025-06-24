@@ -60,7 +60,7 @@ fn detect_complex_multi_victim_sandwich() {
     let group = aggr.groups().values().next().unwrap();
     let detector = AttackDetector::new(1.0, 10);
     let verdict = detector.analyze_group(group).expect("should detect attack");
-    assert!(matches!(verdict.attack_type, Some(AttackType::Sandwich { .. })));
+    assert!(verdict.attack_types.iter().any(|a| matches!(a, AttackType::Sandwich { .. })));
 }
 
 #[test]
