@@ -87,7 +87,7 @@ impl CurveModel for ConstantProductCurve {
             amount_in,
             snapshot.reserve_in,
             snapshot.reserve_out,
-            self.fee_rate,
+            self.fee,
         )
     }
 
