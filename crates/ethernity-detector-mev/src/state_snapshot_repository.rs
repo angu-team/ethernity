@@ -431,7 +431,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn concurrent_db_write_corruption_prevention() {
+    async fn concurrent_db_write_corruption_prevention_alt() {
         use std::sync::Arc;
         use std::thread;
 
