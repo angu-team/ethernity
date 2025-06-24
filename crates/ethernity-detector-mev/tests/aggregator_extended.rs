@@ -182,6 +182,30 @@ fn metric_reorderable_flag() {
 }
 
 #[test]
+fn massive_timestamp_collision_stability() {
+    let mut aggr = TxAggregator::new();
+    let tokens = vec![Address::repeat_byte(0x01), Address::repeat_byte(0x02)];
+    let targets = vec![Address::repeat_byte(0xaa)];
+    let tags = vec!["swap-v2".to_string()];
+    let ts = 1_234_567_890u64;
+
+    for i in 0..1000u64 {
+        let gas = 1000.0 - i as f64;
+        aggr.add_tx(make_tx((i % 256) as u8, ts, gas, 0.9, tokens.clone(), targets.clone(), tags.clone()));
+    }
+
+    assert_eq!(aggr.groups().len(), 1);
+    let group = aggr.groups().values().next().unwrap();
+    assert_eq!(group.txs.len(), 1000);
+    for pair in group.txs.windows(2) {
+        assert!(pair[0].gas_price <= pair[1].gas_price);
+        assert_eq!(pair[0].first_seen, ts);
+        assert_eq!(pair[1].first_seen, ts);
+    }
+    assert_eq!(group.ordering_certainty_score, 1.0);
+}
+
+#[test]
 fn events_add_tx_event() {
     let mut aggr = TxAggregator::new();
     let tokens = vec![Address::repeat_byte(0x01), Address::repeat_byte(0x02)];
