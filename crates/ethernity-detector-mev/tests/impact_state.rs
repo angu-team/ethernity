@@ -311,7 +311,7 @@ fn high_volatility_penalizes_confidence() {
 fn dynamic_fee_impact() {
     let (aggr, key) = make_group(vec!["swap-v2".into()]);
     let group = aggr.groups().get(&key).unwrap();
-    let curve = ConstantProductCurve { fee_rate: 0.005 };
+    let curve = ConstantProductCurve { fee: 0.005 };
     let params = ImpactModelParams { curve_model: Arc::new(curve), ..Default::default() };
     let mut ev = StateImpactEvaluator::new(params);
     let victims = vec![VictimInput { tx_hash: H256::zero(), amount_in: 100.0, amount_out_min: 95.0, token_behavior_unknown: false, flash_loan_amount: None }];
