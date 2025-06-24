@@ -431,7 +431,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn concurrent_db_write_corruption_prevention() {
+    async fn concurrent_db_write_corruption_prevention_async() {
         use std::sync::Arc;
         use std::thread;
 
@@ -472,7 +472,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn concurrent_db_write_corruption_prevention() {
+    async fn concurrent_db_write_corruption_prevention_parallel() {
         use futures::future::join_all;
         use std::sync::Arc;
         use tokio::time::{timeout, Duration};
