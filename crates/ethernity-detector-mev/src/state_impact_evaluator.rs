@@ -83,7 +83,12 @@ impl Default for ConstantProductCurve {
 
 impl CurveModel for ConstantProductCurve {
     fn expected_out(&self, amount_in: f64, snapshot: &StateSnapshot) -> f64 {
-        StateImpactEvaluator::expected_out_v2(amount_in, snapshot.reserve_in, snapshot.reserve_out, self.fee)
+        StateImpactEvaluator::expected_out_v2(
+            amount_in,
+            snapshot.reserve_in,
+            snapshot.reserve_out,
+            self.fee_rate,
+        )
     }
 
     fn apply_trade(&self, amount_in: f64, snapshot: &mut StateSnapshot) {
@@ -223,6 +228,9 @@ impl StateImpactEvaluator {
             "medium" => state_confidence -= 0.1,
             _ => {},
         }
+        if snapshot.volatility_flag {
+            state_confidence *= 0.9;
+        }
         if state_confidence < 0.0 { state_confidence = 0.0; }
         let impact_certainty = if impacts.iter().any(|v| v.token_behavior_unknown) { 0.61 } else { 0.9 };
         let mut opportunity_score = (state_confidence + impact_certainty) / 2.0;
@@ -249,7 +257,12 @@ impl StateImpactEvaluator {
         else { PoolType::Unknown }
     }
 
-    fn expected_out_v2(amount_in: f64, reserve_in: f64, reserve_out: f64, fee: f64) -> f64 {
+    fn expected_out_v2(
+        amount_in: f64,
+        reserve_in: f64,
+        reserve_out: f64,
+        fee_rate: f64,
+    ) -> f64 {
         if reserve_in <= 0.0
             || reserve_out <= 0.0
             || amount_in <= 0.0
@@ -260,13 +273,17 @@ impl StateImpactEvaluator {
             return 0.0;
         }
 
-        let fee_mul = 1.0 - fee;
+        let fee_mul = 1.0 - fee_rate;
+        if !fee_mul.is_finite() || fee_mul <= 0.0 {
+            return 0.0;
+        }
+
         let denom = reserve_in + amount_in * fee_mul;
         if !denom.is_finite() || denom <= 0.0 {
             return 0.0;
         }
 
-        let out = (amount_in * fee_mul * reserve_out) / denom;
+        let out = amount_in * fee_mul * reserve_out / denom;
         if out.is_finite() && out >= 0.0 { out } else { 0.0 }
     }
 
@@ -288,7 +305,7 @@ impl StateImpactEvaluator {
         tx: tokio::sync::mpsc::Sender<crate::events::ImpactEvent>,
     ) {
         while let Some(ev) = rx.recv().await {
-            if let Some(snapshot) = ev.snapshots.values().next() {
+            for snapshot in ev.snapshots.values() {
                 let impact = Self::evaluate(&ev.group, &[], snapshot);
                 let _ = tx
                     .send(crate::events::ImpactEvent {
