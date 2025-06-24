@@ -118,6 +118,7 @@ fn numerical_stability_extreme_values() {
         amount_in: f64::MAX,
         amount_out_min: 0.0,
         token_behavior_unknown: false,
+        flash_loan_amount: None,
     }];
     let snapshot = StateSnapshot {
         reserve_in: 1e-18,
