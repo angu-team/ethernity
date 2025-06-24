@@ -1,4 +1,4 @@
-use ethernity_detector_mev::{MempoolSupervisor, AnnotatedTx};
+use ethernity_detector_mev::{MempoolSupervisor, AnnotatedTx, SupervisorEvent, BlockMetadata};
 use ethernity_core::{traits::RpcProvider, error::Result, types::TransactionHash};
 use ethereum_types::{Address, H256, U256};
 use async_trait::async_trait;
@@ -27,7 +27,7 @@ fn sample_tx(idx: u8, gas: f64, ts: u64) -> AnnotatedTx {
     AnnotatedTx {
         tx_hash: H256::repeat_byte(idx),
         token_paths: vec![Address::repeat_byte(0x01), Address::repeat_byte(0x02)],
-        targets: vec![Address::repeat_byte(0xaa + idx)],
+        targets: vec![Address::repeat_byte(0xaau8.wrapping_add(idx))],
         tags: vec!["swap-v2".to_string()],
         first_seen: ts,
         gas_price: gas,
@@ -123,4 +123,53 @@ async fn memory_pressure_graceful_degradation() {
 
     // restore original limits
     let _ = setrlimit(Resource::AS, old_soft, old_hard);
+}
+
+#[tokio::test]
+async fn supervisor_event_ordering_consistency() {
+    let _ = std::fs::remove_dir_all("snapshot_db");
+    let provider = DummyProvider::default();
+    let mut sup = MempoolSupervisor::new(provider.clone(), 1, Duration::from_secs(1), 10);
+    let (tx_in, rx_in) = tokio::sync::mpsc::channel(1024);
+    let (tx_out, mut rx_out) = tokio::sync::mpsc::channel(1024);
+
+    let handle = tokio::spawn(async move { sup.process_stream(rx_in, tx_out).await; });
+
+    let mut send_handles = Vec::new();
+    for i in 0u64..1000 {
+        let tx = tx_in.clone();
+        let prov = provider.clone();
+        send_handles.push(tokio::spawn(async move {
+            if i % 2 == 0 {
+                let num = {
+                    let mut b = prov.block.lock().unwrap();
+                    *b += 1;
+                    *b
+                };
+                tx.send(SupervisorEvent::BlockAdvanced(BlockMetadata { number: num }))
+                    .await
+                    .unwrap();
+            } else {
+                tx.send(SupervisorEvent::NewTxObserved(sample_tx((i % 0xff) as u8, 10.0, i)))
+                    .await
+                    .unwrap();
+            }
+        }));
+    }
+
+    for h in send_handles { h.await.unwrap(); }
+    drop(tx_in);
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    handle.abort();
+    let _ = handle.await;
+
+    let mut metas = Vec::new();
+    while let Ok(Some(g)) = tokio::time::timeout(Duration::from_millis(20), rx_out.recv()).await {
+        metas.push((g.metadata.window_id, g.group.window_start));
+    }
+
+    for (id, start) in metas {
+        assert_eq!(id, start);
+    }
 }
