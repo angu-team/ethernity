@@ -182,9 +182,11 @@ impl<P: RpcProvider + Clone> MempoolSupervisor<P> {
         if let Some(bn) = new_block {
             result = self.finalize_groups(bn).await?;
             self.window_id += 1;
+            self.aggregator.set_window_start(self.window_id);
         } else if self.aggregator.groups().len() >= self.max_active_groups {
             result = self.finalize_groups(block).await?;
             self.window_id += 1;
+            self.aggregator.set_window_start(self.window_id);
         }
         Ok(result)
     }
@@ -204,6 +206,7 @@ impl<P: RpcProvider + Clone> MempoolSupervisor<P> {
                     let _ = tx.send(g).await;
                 }
                 self.window_id += 1;
+                self.aggregator.set_window_start(self.window_id);
                 self.last_block = number;
             }
             SupervisorEvent::StateRefreshed(_tag) => {}
