@@ -429,4 +429,49 @@ mod tests {
             assert!(repo.get_state(Address::repeat_byte(i), 1, SnapshotProfile::Basic).is_some());
         }
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn concurrent_db_write_corruption_prevention() {
+        use futures::future::join_all;
+        use std::sync::Arc;
+        use tokio::time::{timeout, Duration};
+
+        let dir = TempDir::new().unwrap();
+        let provider = DummyProvider::default();
+        provider.push_response(1000, 0);
+        provider.push_response(2000, 0);
+        provider.set_hash(1, H256::repeat_byte(0x01));
+
+        let repo = Arc::new(StateSnapshotRepository::open(provider.clone(), dir.path()).unwrap());
+        let target = Address::repeat_byte(0xaa);
+
+        let g1 = make_group(target);
+        let g2 = make_group(target);
+
+        let handles = vec![
+            {
+                let r = Arc::clone(&repo);
+                tokio::spawn(async move {
+                    r.snapshot_groups(&g1, 1, SnapshotProfile::Basic).await.unwrap();
+                })
+            },
+            {
+                let r = Arc::clone(&repo);
+                tokio::spawn(async move {
+                    r.snapshot_groups(&g2, 1, SnapshotProfile::Basic).await.unwrap();
+                })
+            },
+        ];
+
+        timeout(Duration::from_secs(5), join_all(handles)).await.unwrap();
+
+        drop(repo);
+        let repo_check = StateSnapshotRepository::open(provider, dir.path()).unwrap();
+        let key = StateSnapshotRepository::<DummyProvider>::key(target, 1, SnapshotProfile::Basic);
+        let read_txn = repo_check.db.begin_read().unwrap();
+        let table = read_txn.open_table(SNAPSHOT_TABLE).unwrap();
+        let raw = table.get(key.as_bytes()).unwrap().unwrap();
+        let entry: PersistedSnapshot = serde_json::from_slice(raw.value()).unwrap();
+        assert!(entry.snapshot.reserve_in == 1000.0 || entry.snapshot.reserve_in == 2000.0);
+    }
 }
