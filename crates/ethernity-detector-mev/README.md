@@ -79,6 +79,10 @@ Verifica se agrupamentos contêm:
 - Sandwich em formação
 - Spoofing de preço
 - Backruns evidentes
+- Ataques cross-chain
+- Operações com flash loans
+- Interações com múltiplos tokens
+- Oportunidades de MEV em L2
 
   → Marca agrupamentos contaminados para exclusão ou reclassificação.
 
