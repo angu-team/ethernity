@@ -83,7 +83,7 @@ async fn deep_reorg_and_db_corruption() {
     // corrupt entries for blocks 2 and 4
     let db_path = dir.path().join("db.redb");
     let db = Database::open(db_path).unwrap();
-    let mut tx = db.begin_write().unwrap();
+    let tx = db.begin_write().unwrap();
     {
         let mut table = tx.open_table(SNAPSHOT_TABLE).unwrap();
         let k2 = format!("0x{:x}:2:basic", target);

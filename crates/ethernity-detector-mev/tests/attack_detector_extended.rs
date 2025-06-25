@@ -103,7 +103,7 @@ fn edge_multiple_attacks_prefers_sandwich() {
     let targets = vec![Address::repeat_byte(0xaa)];
     let tags = vec!["swap-v2".to_string()];
 
-    let mut a = AnnotatedTx {
+    let a = AnnotatedTx {
         tx_hash: H256::repeat_byte(0x60),
         token_paths: token_paths.clone(),
         targets: targets.clone(),
@@ -146,7 +146,7 @@ fn edge_low_confidence_reconsiderable() {
     // long tags to trigger anomaly
     let tags = vec!["swap-v2".to_string(), "very-very-long-tag-over-twenty".to_string(), "another-very-long-tag".to_string()];
 
-    let mut tx1 = AnnotatedTx {
+    let tx1 = AnnotatedTx {
         tx_hash: H256::repeat_byte(0x70),
         token_paths: token_paths.clone(),
         targets: targets.clone(),
@@ -176,7 +176,7 @@ fn priority_max_fee_respected() {
     let targets = vec![Address::repeat_byte(0xaa)];
     let tags = vec!["swap-v2".to_string()];
 
-    let mut a = AnnotatedTx {
+    let a = AnnotatedTx {
         tx_hash: H256::repeat_byte(0x80),
         token_paths: token_paths.clone(),
         targets: targets.clone(),
@@ -206,7 +206,7 @@ fn priority_ordering_by_seen() {
     let targets = vec![Address::repeat_byte(0xaa)];
     let tags = vec!["swap-v2".to_string()];
 
-    let mut a = AnnotatedTx {
+    let a = AnnotatedTx {
         tx_hash: H256::repeat_byte(0x90),
         token_paths: token_paths.clone(),
         targets: targets.clone(),
@@ -236,7 +236,7 @@ fn hybrid_attack_comprehensive_detection() {
     let tags = vec!["swap-v2".to_string()];
 
     // frontrun attacker
-    let mut a1 = AnnotatedTx {
+    let a1 = AnnotatedTx {
         tx_hash: H256::repeat_byte(0xa0),
         token_paths: token_paths.clone(),
         targets: targets.clone(),

@@ -234,7 +234,7 @@ fn events_finalize_events() {
 
 #[tokio::test]
 async fn events_process_stream_events() {
-    let mut aggr = TxAggregator::new();
+    let aggr = TxAggregator::new();
     let tokens = vec![Address::repeat_byte(0x01), Address::repeat_byte(0x02)];
     let targets = vec![Address::repeat_byte(0xaa)];
     let tags = vec!["swap-v2".to_string()];

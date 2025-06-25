@@ -1,4 +1,4 @@
-use ethernity_detector_mev::{TxNatureTagger, RawTx, TransactionClassifier, TagPrediction};
+use ethernity_detector_mev::{TxNatureTagger, RawTx, TransactionClassifier};
 use ethernity_core::{traits::RpcProvider, error::{Result, Error}, types::TransactionHash};
 use ethereum_types::{Address, H256};
 use async_trait::async_trait;
