@@ -2,120 +2,79 @@
 
 **Tipo:** Crate modular para detecção passiva de vítimas de MEV no mempool Ethereum
 
-**Escopo:** Detecção multi-vítima, multi-token, multi-contexto, com inferência estática e leitura de estado determinística.
+**Escopo:** Detecção multi-vítima, multi-token e multi-contexto, usando inferência estática e leitura de estado determinística.
 
 **Ambiente:** Tempo real, sem execução, simulação ou trace.
 
-**Foco:** Reconhecimento de agrupamentos exploráveis com cálculo de slippage tolerada, convexidade e estimativa de backrun.
+**Foco:** Reconhecimento de agrupamentos exploráveis com cálculo de slippage, convexidade e estimativa de backrun.
 
 ---
 
 ## ✦ Descrição Geral
 
-`mev-victim-detector` é uma crate para uso em sistemas de monitoramento de mempool Ethereum, dedicada à **detecção passiva de oportunidades de exploração MEV** (e.g., sandwich, backrun, spoof) com múltiplas vítimas e tokens em paralelo.
-
-A crate opera por inferência estática e leitura de estado on-chain sem qualquer forma de execução de transação. Sua arquitetura é orientada a fluxo contínuo de estado e centrada em *contextos econômicos isolados*, permitindo avaliação paralela de agrupamentos disjuntos em tempo real.
+`ethernity-detector-mev` oferece uma pipeline completa para inspeção de transações Ethereum em tempo real. O objetivo é identificar agrupamentos de potenciais vítimas de MEV e estimar o lucro possível em estratégias como frontrun, sandwich e backrun. Não há envio nem simulação de transações: toda a inferência é feita localmente a partir de dados do mempool e snapshots de estado on-chain.
 
 ---
 
 ## ✦ Arquitetura de Módulos
 
 ### 1. **TxNatureTagger**
-
-Classifica cada transação com base em `calldata` e `bytecode`. Extrai:
-
-- `tags`: funções estimadas (swap, proxy, transfer)
-- `token_paths`: sequência de tokens afetados
-- `targets`: pools ou contratos relevantes
-
-  → Primeira etapa do pipeline.
-
-
----
+Classifica cada transação com base no `calldata` e no bytecode do contrato destino.
+- `tags` inferidas (swap-v2, swap-v3, transfer, proxy-call etc.)
+- `token_paths` detectados no corpo da transação
+- `targets` envolvidos
 
 ### 2. **TxAggregator**
-
-Agrupa transações anotadas por `token_paths` + `targets`, formando:
-
-- Janelas temporais com múltiplas vítimas
-- Buckets paralelizáveis por `group_key`
-
-  → Emite agrupamentos coesos para avaliação de impacto.
-
-
----
+Agrupa transações anotadas por par de tokens e alvos comuns, formando janelas paralelizáveis identificadas por `group_key`.
+- Reavalia contaminação e capacidade de reordenação
+- Mantém ordem temporal das transações observadas
 
 ### 3. **StateSnapshotRepository**
-
-Cache persistente de snapshots:
-
-- Armazena em RocksDB por `(contract_address, block_number)`
-- Valida `block_hash` para lidar com forks
-- Evita recomputações redundantes
-
-  → Fornece estado consistente com a cadeia vigente.
-
-
----
+Repositório de snapshots com persistência em **redb**.
+- Chaves de armazenamento `(contract_address, block_number)`
+- Verificação de `block_hash` para lidar com forks
+- Histórico curto para verificar volatilidade e backups/restauração opcionais
 
 ### 4. **StateImpactEvaluator**
-
-Avalia agrupamentos por:
-
-- Slippage tolerada (por vítima)
-- Convexidade de impacto
-- Estimativa de retorno no backrun
-
-  → Gera `opportunity_score` por grupo com `expectedProfitBackrun`.
-
-
----
+Calcula impacto econômico esperado de um grupo.
+- Slippage tolerada por vítima
+- Histórico de slippage para média móvel
+- Convexidade e simulação leve de curva constante ou Uniswap V3
+- Produz `opportunity_score` e `expected_profit_backrun`
 
 ### 5. **AttackDetector**
+Aplica heurísticas para detectar padrões de ataque.
+- Frontrun, sandwich, spoof, backrun
+- Cross-chain, flash loan, múltiplos tokens e cenários L2
+- Combinações de sinais geram `AttackVerdict` com nível de confiança
 
-Verifica se agrupamentos contêm:
+### 6. **RpcStateProvider**
+Interface de acesso ao estado via RPC com cache embutido e fallback opcional.
+- Métodos `reserves()` e `slot0()` com LRU cache
+- Suporta múltiplos providers para tolerância a falhas
 
-- Frontruns externos
-- Sandwich em formação
-- Spoofing de preço
-- Backruns evidentes
-- Ataques cross-chain
-- Operações com flash loans
-- Interações com múltiplos tokens
-- Oportunidades de MEV em L2
-
-  → Marca agrupamentos contaminados para exclusão ou reclassificação.
-
-
----
-
-### 6. **MempoolSupervisor**
-
-Orquestra todo o ciclo:
-
-- Regula ingestão de transações
-- Controla janelas de agrupamento
-- Sincroniza blocos com `blockNumber`
-- Atua como **FSM assíncrona** guiada por eventos `SupervisorEvent`
-
-```rust
-enum SupervisorEvent {
-    NewTxObserved(Tx),
-    BlockAdvanced(BlockMetadata),
-    StateRefreshed(String),
-    GroupFinalized(String),
-}
-```
-
-  → Garante consistência temporal e coordenação entre os módulos.
-
+### 7. **MempoolSupervisor**
+Orquestrador do ciclo completo.
+- Ajusta TTL de transações e modo de operação (Normal/Burst/Recovery)
+- Gere janelas de avaliação sincronizadas com a altura do bloco
+- Emite `GroupReady` contendo agrupamento e metadados de sincronização
 
 ---
 
-## ✦ Output Final
+## ✦ Estratégia de Identificação
 
-Por grupo analisado:
+1. **Classificação** – cada transação é rotulada pelo `TxNatureTagger`.
+2. **Agrupamento** – `TxAggregator` junta transações compatíveis em grupos.
+3. **Snapshot de Estado** – `StateSnapshotRepository` coleta reserves e slot0 via `RpcStateProvider`.
+4. **Avaliação de Impacto** – `StateImpactEvaluator` estima lucro e risco considerando slippage histórica e convexidade.
+5. **Detecção de Ataque** – `AttackDetector` procura padrões de frontrun, sandwich, spoofing ou flash loan.
+6. **Supervisão** – `MempoolSupervisor` coordena essas etapas, adaptando janelas conforme o volume (por exemplo, redes como BSC com blocos rápidos).
 
+O resultado final inclui tokens analisados, métricas de slippage e um `opportunity_score` que indica a viabilidade econômica de executar um ataque MEV.
+
+---
+
+## ✦ Exemplo de Saída
 ```json
 {
   "group_id": "0xUniswapPair_TokenA_TokenB_block17629811",
@@ -132,36 +91,31 @@ Por grupo analisado:
   "opportunity_score": 0.83,
   "expectedProfitBackrun": 47.2,
   "attack_detected": false
-  }
+}
 ```
 
 ---
 
 ## ✦ Propriedades Operacionais
-
-- **Não simula, não executa, não envia transações**
-- Processamento **100% local e determinístico**
+- Não simula nem envia transações
+- Processamento local e determinístico
 - Paralelização natural por agrupamento
-- Tolerante a ruído de mempool e transações incompletas
-- Capaz de operar em ambiente RPC limitado
+- Robusto contra ruído do mempool
+- Opera em ambientes RPC limitados (incluindo BSC)
 
 ---
 
 ## ✦ Casos de Uso
-
-- **Bots MEV passivos** (filtro de agrupamentos viáveis)
-- **Sistemas de defesa anti-MEV** (reconhecimento de sandbox hostil)
-- **Dashboards de inteligência MEV**
-- **Análise forense de transações mempool**
+- Bots MEV passivos
+- Sistemas de defesa anti-MEV
+- Dashboards de inteligência
+- Análises forenses de mempool
 
 ---
 
 ## ✦ Requisitos
-
 - Acesso a um nó Ethereum RPC com suporte a:
-    - `eth_call`
-    - `eth_getCode`
-    - `eth_getStorageAt`
-- Buffer de transações pendentes (mempool stream)
-
----
+  - `eth_call`
+  - `eth_getCode`
+  - `eth_getStorageAt`
+- Stream de transações pendentes (mempool)
