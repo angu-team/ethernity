@@ -28,6 +28,5 @@ tempfile = "3"
 loom = "0.7"
 futures = { workspace = true }
 rlimit = "0.10"
-web3 = { workspace = true }
 ethernity-rpc = { path = "../ethernity-rpc" }
 anyhow = { workspace = true }

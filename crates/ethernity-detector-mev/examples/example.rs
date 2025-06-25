@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use ethernity_detector_mev::*;
 use ethernity_rpc::{EthernityRpcClient, RpcConfig};
-use web3::types::{Block, Transaction};
+use ethers::types::{Block, Transaction, U256};
 use ethernity_core::{traits::RpcProvider, error::Result};
 use ethernity_core::types::TransactionHash;
 use ethereum_types::{Address, H256};
@@ -39,7 +39,7 @@ impl RpcProvider for SharedRpc {
 }
 
 /// Converte U256 para f64 de forma segura.
-fn u256_to_f64(value: web3::types::U256) -> f64 {
+fn u256_to_f64(value: U256) -> f64 {
     value.low_u128() as f64
 }
 
@@ -72,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
 
     println!("Analisando bloco {target_block}...");
 
-    // Recupera o bloco com detalhes das transações e converte para estrutura do web3
+    // Recupera o bloco com detalhes das transações e converte para estrutura do ethers
     let block_bytes = rpc_client.get_block_with_txs(target_block).await?;
     let block: Block<Transaction> = serde_json::from_slice(&block_bytes)?;
 

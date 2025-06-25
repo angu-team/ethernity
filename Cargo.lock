@@ -1020,11 +1020,13 @@ dependencies = [
 name = "ethernity-detector-mev"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "chrono",
  "dashmap",
  "ethereum-types",
  "ethernity-core",
+ "ethernity-rpc",
  "ethers",
  "futures",
  "hex",
