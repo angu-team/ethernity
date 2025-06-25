@@ -4,12 +4,43 @@ use std::sync::Arc;
 use ethernity_detector_mev::*;
 use ethernity_rpc::{EthernityRpcClient, RpcConfig};
 use web3::types::{Block, Transaction};
+use ethernity_core::{traits::RpcProvider, error::Result};
+use ethernity_core::types::TransactionHash;
+use ethereum_types::{Address, H256};
+
+#[derive(Clone)]
+struct SharedRpc(Arc<EthernityRpcClient>);
+
+#[async_trait::async_trait]
+impl RpcProvider for SharedRpc {
+    async fn get_transaction_trace(&self, tx_hash: TransactionHash) -> Result<Vec<u8>> {
+        self.0.get_transaction_trace(tx_hash).await
+    }
+
+    async fn get_transaction_receipt(&self, tx_hash: TransactionHash) -> Result<Vec<u8>> {
+        self.0.get_transaction_receipt(tx_hash).await
+    }
+
+    async fn get_code(&self, address: Address) -> Result<Vec<u8>> {
+        self.0.get_code(address).await
+    }
+
+    async fn call(&self, to: Address, data: Vec<u8>) -> Result<Vec<u8>> {
+        self.0.call(to, data).await
+    }
+
+    async fn get_block_number(&self) -> Result<u64> {
+        self.0.get_block_number().await
+    }
+
+    async fn get_block_hash(&self, block_number: u64) -> Result<H256> {
+        self.0.get_block_hash(block_number).await
+    }
+}
 
 /// Converte U256 para f64 de forma segura.
 fn u256_to_f64(value: web3::types::U256) -> f64 {
-    // web3::types::U256 -> primitive u128 -> f64
-    let val: u128 = value.into();
-    val as f64
+    value.low_u128() as f64
 }
 
 #[tokio::main]
@@ -30,18 +61,19 @@ async fn main() -> anyhow::Result<()> {
 
     // Configuração simples do cliente RPC
     let rpc_config = RpcConfig { endpoint: endpoint.clone(), ..Default::default() };
-    let rpc = Arc::new(EthernityRpcClient::new(rpc_config).await?);
+    let rpc_client = Arc::new(EthernityRpcClient::new(rpc_config).await?);
+    let rpc = SharedRpc(rpc_client.clone());
 
     // Determina o bloco a ser analisado (atual se não fornecido)
     let target_block = match block_number {
         Some(b) => b,
-        None => rpc.get_block_number().await?,
+        None => rpc_client.get_block_number().await?,
     };
 
     println!("Analisando bloco {target_block}...");
 
     // Recupera o bloco e converte para estrutura do web3
-    let block_bytes = rpc.get_block(target_block).await?;
+    let block_bytes = rpc_client.get_block(target_block).await?;
     let block: Block<Transaction> = serde_json::from_slice(&block_bytes)?;
 
     // Instancia componentes principais
