@@ -219,8 +219,8 @@ if let Some(status) = receipt.get("status").and_then(|s| s.as_str()) {
 #### Operações de Bloco
 
 ```rust
-// Obter informações de bloco
-let block_bytes = client.get_block(12345678).await?;
+// Obter informações de bloco com transações completas
+let block_bytes = client.get_block_with_txs(12345678).await?;
 let block: serde_json::Value = serde_json::from_slice(&block_bytes)?;
 
 // Extrair informações do bloco

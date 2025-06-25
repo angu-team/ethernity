@@ -2,7 +2,7 @@
 
 Este exemplo demonstra o uso básico da crate para detectar oportunidades MEV em um bloco Ethereum.
 
-Execute:
+Execute o exemplo apontando para um RPC que permita obter os blocos com transações completas:
 
 ```bash
 cargo run --example example -- <RPC_ENDPOINT> [BLOCO]

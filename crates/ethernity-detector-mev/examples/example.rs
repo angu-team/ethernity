@@ -72,8 +72,8 @@ async fn main() -> anyhow::Result<()> {
 
     println!("Analisando bloco {target_block}...");
 
-    // Recupera o bloco e converte para estrutura do web3
-    let block_bytes = rpc_client.get_block(target_block).await?;
+    // Recupera o bloco com detalhes das transações e converte para estrutura do web3
+    let block_bytes = rpc_client.get_block_with_txs(target_block).await?;
     let block: Block<Transaction> = serde_json::from_slice(&block_bytes)?;
 
     // Instancia componentes principais
