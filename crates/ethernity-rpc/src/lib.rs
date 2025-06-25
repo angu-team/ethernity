@@ -266,6 +266,51 @@ impl EthernityRpcClient {
         Ok(block_bytes)
     }
 
+    /// Obtém informações de um bloco com detalhes completos das transações
+    pub async fn get_block_with_txs(&self, block_number: u64) -> Result<Vec<u8>> {
+        let cache_key = format!("block_full_{}", block_number);
+
+        // Verifica o cache
+        if self.config.use_cache {
+            let cache = self.cache.read();
+            if let Some((data, timestamp)) = cache.get(&cache_key) {
+                if timestamp.elapsed() < self.config.cache_ttl {
+                    return Ok(data.clone());
+                }
+            }
+        }
+
+        // Executa a chamada RPC diretamente com transações completas
+        let block = match &self.transport {
+            TransportType::Http(web3) => {
+                web3.eth()
+                    .block_with_txs(BlockId::Number(BlockNumber::Number(U64::from(block_number))))
+                    .await
+                    .map_err(|e| Error::RpcError(format!("Falha ao obter bloco: {}", e)))?
+            }
+            TransportType::WebSocket(web3) => {
+                web3.eth()
+                    .block_with_txs(BlockId::Number(BlockNumber::Number(U64::from(block_number))))
+                    .await
+                    .map_err(|e| Error::RpcError(format!("Falha ao obter bloco: {}", e)))?
+            }
+        };
+
+        let block = block.ok_or_else(|| Error::NotFound("Bloco não encontrado".to_string()))?;
+
+        // Converte o resultado para bytes
+        let block_bytes = serde_json::to_vec(&block)
+            .map_err(|e| Error::EncodeError(format!("Falha ao serializar bloco: {}", e)))?;
+
+        // Atualiza o cache
+        if self.config.use_cache {
+            let mut cache = self.cache.write();
+            cache.insert(cache_key, (block_bytes.clone(), std::time::Instant::now()));
+        }
+
+        Ok(block_bytes)
+    }
+
     /// Obtém o número do bloco atual
     pub async fn get_block_number(&self) -> Result<u64> {
         let block_number = match &self.transport {
