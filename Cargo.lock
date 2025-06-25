@@ -1040,6 +1040,7 @@ dependencies = [
  "tempfile",
  "tiny-keccak",
  "tokio",
+ "web3",
 ]
 
 [[package]]
