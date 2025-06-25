@@ -30,4 +30,3 @@ futures = { workspace = true }
 rlimit = "0.10"
 ethernity-rpc = { path = "../ethernity-rpc" }
 anyhow = { workspace = true }
-web3 = { workspace = true }

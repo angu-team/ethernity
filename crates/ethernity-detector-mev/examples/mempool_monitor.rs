@@ -7,11 +7,9 @@ use ethernity_detector_mev::*;
 use ethernity_rpc::{EthernityRpcClient, RpcConfig};
 use ethernity_core::{traits::RpcProvider, error::Result};
 use ethernity_core::types::TransactionHash;
+use ethers::providers::{Middleware, Provider, Ws, StreamExt};
 use ethers::types::U256;
 use ethereum_types::{Address, H256};
-use futures::StreamExt;
-use web3::transports::WebSocket;
-use web3::types::{TransactionId};
 
 #[derive(Clone)]
 struct SharedRpc(Arc<EthernityRpcClient>);
@@ -64,9 +62,9 @@ async fn main() -> anyhow::Result<()> {
     let rpc_client = Arc::new(EthernityRpcClient::new(rpc_cfg).await?);
     let rpc = SharedRpc(rpc_client.clone());
 
-    // Conexão WebSocket para subscrever novas transações pendentes
-    let ws = WebSocket::new(&endpoint).await?;
-    let web3 = web3::Web3::new(ws);
+    // Conexão WebSocket usando ethers para subscrever novas transações pendentes
+    let ws = Ws::connect(&endpoint).await?;
+    let provider = Provider::new(ws);
 
     // Canal de eventos para o supervisor
     let (bus, rx_events) = EventBus::new(1024);
@@ -80,39 +78,40 @@ async fn main() -> anyhow::Result<()> {
     let tx_sender = bus.sender();
     let tagger = TxNatureTagger::new(rpc.clone());
     tokio::spawn(async move {
-        let mut sub = match web3.eth_subscribe().subscribe_new_pending_transactions().await {
+        let mut sub = match provider.subscribe_pending_txs().await {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("Falha ao subscrever mempool: {e}");
                 return;
             }
         };
-        while let Some(item) = sub.next().await {
-            match item {
-                Ok(hash) => {
-                    if let Ok(Some(tx)) = web3.eth().transaction(TransactionId::Hash(hash)).await {
-                        if let Some(to) = tx.to {
-                            let input = tx.input.0.clone();
-                            match tagger.analyze(to, &input, tx.hash).await {
-                                Ok(nature) => {
-                                    let annotated = AnnotatedTx {
-                                        tx_hash: tx.hash,
-                                        token_paths: nature.token_paths,
-                                        targets: nature.targets,
-                                        tags: nature.tags,
-                                        first_seen: chrono::Utc::now().timestamp() as u64,
-                                        gas_price: tx.gas_price.map(u256_to_f64).unwrap_or_default(),
-                                        max_priority_fee_per_gas: tx.max_priority_fee_per_gas.map(u256_to_f64),
-                                        confidence: nature.confidence,
-                                    };
-                                    let _ = tx_sender.send(SupervisorEvent::NewTxObserved(annotated)).await;
-                                }
-                                Err(e) => eprintln!("Tagger error: {e}")
+        while let Some(hash) = sub.next().await {
+            match provider.get_transaction(hash).await {
+                Ok(Some(tx)) => {
+                    if let Some(to) = tx.to {
+                        let input = tx.input.0.clone();
+                        match tagger.analyze(to, &input, tx.hash).await {
+                            Ok(nature) => {
+                                let annotated = AnnotatedTx {
+                                    tx_hash: tx.hash,
+                                    token_paths: nature.token_paths,
+                                    targets: nature.targets,
+                                    tags: nature.tags,
+                                    first_seen: chrono::Utc::now().timestamp() as u64,
+                                    gas_price: tx.gas_price.map(u256_to_f64).unwrap_or_default(),
+                                    max_priority_fee_per_gas: tx.max_priority_fee_per_gas.map(u256_to_f64),
+                                    confidence: nature.confidence,
+                                };
+                                let _ = tx_sender
+                                    .send(SupervisorEvent::NewTxObserved(annotated))
+                                    .await;
                             }
+                            Err(e) => eprintln!("Tagger error: {e}"),
                         }
                     }
                 }
-                Err(e) => eprintln!("Erro de subscrição: {e:?}"),
+                Ok(None) => {}
+                Err(e) => eprintln!("Erro ao obter transação: {e}"),
             }
         }
     });
