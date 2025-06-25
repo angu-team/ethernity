@@ -134,7 +134,7 @@ async fn integration_full_pipeline() {
         .get_state(to, 1, SnapshotProfile::Basic)
         .expect("snapshot present");
 
-    let impact = StateImpactEvaluator::evaluate(group, &[], &snap);
+    let _impact = StateImpactEvaluator::evaluate(group, &[], &snap);
     let verdict = AttackDetector::new(1.0, 10)
         .analyze_group(group)
         .expect("verdict");
