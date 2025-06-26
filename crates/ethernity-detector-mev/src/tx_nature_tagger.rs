@@ -50,6 +50,10 @@ impl<P> TxNatureTagger<P> {
             vec!["swap-v3".to_string(), "router-call".to_string()],
         );
         selectors.insert(
+            [0xb8, 0x58, 0x18, 0x3f],
+            vec!["swap-v3".to_string(), "router-call".to_string()],
+        );
+        selectors.insert(
             [0xa9, 0x05, 0x9c, 0xbb],
             vec!["transfer".to_string(), "token-move".to_string()],
         );

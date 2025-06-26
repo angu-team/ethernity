@@ -60,6 +60,10 @@ async fn known_selector_detection() {
     let res = tagger.analyze(to, &data_v3, tx).await.unwrap();
     assert!(res.tags.contains(&"swap-v3".to_string()));
 
+    let data_v3_alt = hex::decode("b858183f").unwrap();
+    let res = tagger.analyze(to, &data_v3_alt, tx).await.unwrap();
+    assert!(res.tags.contains(&"swap-v3".to_string()));
+
     let data_transfer = hex::decode("a9059cbb").unwrap();
     let res = tagger.analyze(to, &data_transfer, tx).await.unwrap();
     assert!(res.tags.contains(&"transfer".to_string()));
