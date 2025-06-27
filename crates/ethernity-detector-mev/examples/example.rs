@@ -124,9 +124,8 @@ async fn main() -> anyhow::Result<()> {
     repo.snapshot_groups(aggregator.groups(), target_block, SnapshotProfile::Basic)
         .await?;
 
-    // Avaliadores e detector de ataques
+    // Avaliador de impacto das transações
     let mut impact_eval = StateImpactEvaluator::default();
-    let attack_detector = AttackDetector::new(1.0, 10);
 
     for group in aggregator.groups().values() {
         println!("\nGrupo {:x} ({} txs)", group.group_key, group.txs.len());
@@ -136,15 +135,7 @@ async fn main() -> anyhow::Result<()> {
                 let impact = impact_eval.evaluate_group(group, &[], &snapshot);
                 println!("  Score de oportunidade: {:.2}", impact.opportunity_score);
 
-                // Detecta padrões de ataque MEV
-                if let Some(verdict) = attack_detector.analyze_group(group) {
-                    println!("  Possível ataque MEV detectado com confiança {:.2}", verdict.confidence);
-                    for at in verdict.attack_types {
-                        println!("    - {:?}", at);
-                    }
-                } else {
-                    println!("  Nenhum ataque aparente identificado");
-                }
+                // Aqui poderia ser inserida lógica adicional de análise
             } else {
                 println!("  Snapshot não encontrado para o endereço {:?}", target);
             }

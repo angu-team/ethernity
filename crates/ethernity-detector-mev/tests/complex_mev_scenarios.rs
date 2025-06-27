@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use ethernity_detector_mev::{
-    AnnotatedTx, TxAggregator, AttackDetector, AttackType, VictimInput, 
+    AnnotatedTx, TxAggregator, VictimInput,
     StateImpactEvaluator, ImpactModelParams, ImpactModel, UniswapV3Curve, StateSnapshot
 };
 use ethereum_types::{Address, H256};
@@ -39,29 +39,6 @@ fn default_snapshot() -> StateSnapshot {
     }
 }
 
-#[test]
-fn detect_complex_multi_victim_sandwich() {
-    let mut aggr = TxAggregator::new();
-    let tokens = vec![Address::repeat_byte(0x01), Address::repeat_byte(0x02)];
-    let targets = vec![Address::repeat_byte(0xaa)];
-    let tags = vec!["swap-v3".to_string()];
-
-    // attacker initiates
-    aggr.add_tx(make_tx(0xa0, 1, 50.0, Some(5.0), &tokens, &targets, &tags));
-    // five victim transactions
-    for i in 0..5u8 {
-        aggr.add_tx(make_tx(0xa1 + i, (i as u64) + 2, 12.0, Some(1.0), &tokens, &targets, &tags));
-    }
-    // competing attacker in between
-    aggr.add_tx(make_tx(0xb0, 7, 45.0, Some(4.0), &tokens, &targets, &tags));
-    // attacker closes sandwich
-    aggr.add_tx(make_tx(0xc0, 8, 55.0, Some(5.0), &tokens, &targets, &tags));
-
-    let group = aggr.groups().values().next().unwrap();
-    let detector = AttackDetector::new(1.0, 10);
-    let verdict = detector.analyze_group(group).expect("should detect attack");
-    assert!(verdict.attack_types.iter().any(|a| matches!(a, AttackType::Sandwich { .. })));
-}
 
 #[test]
 fn state_impact_deflationary_multi_victims() {

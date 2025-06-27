@@ -1,5 +1,5 @@
 use ethernity_detector_mev::{
-    AttackDetector, TxNatureTagger, TxAggregator, StateSnapshotRepository,
+    TxNatureTagger, TxAggregator, StateSnapshotRepository,
     StateImpactEvaluator, SnapshotProfile, RawTx
 };
 use ethernity_core::{traits::RpcProvider, error::{Result, Error}};
@@ -135,10 +135,5 @@ async fn integration_full_pipeline() {
         .expect("snapshot present");
 
     let _impact = StateImpactEvaluator::evaluate(group, &[], &snap);
-    let verdict = AttackDetector::new(1.0, 10)
-        .analyze_group(group)
-        .expect("verdict");
-    assert_eq!(verdict.group_key, group.group_key);
-    assert!(!verdict.attack_types.is_empty());
 }
 

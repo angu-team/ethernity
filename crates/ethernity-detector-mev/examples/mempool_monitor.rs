@@ -132,11 +132,10 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    // Avaliadores de impacto e detecção de ataques
+    // Avaliador de impacto econômico
     let repo_dir = std::env::temp_dir().join("mev_example_db");
     let repo = StateSnapshotRepository::open(rpc.clone(), &repo_dir)?;
     let mut impact_eval = StateImpactEvaluator::default();
-    let detector = AttackDetector::new(1.0, 10);
 
     println!("Monitorando mempool em {endpoint} ...");
     while let Some(gr) = rx_groups.recv().await {
@@ -147,14 +146,6 @@ async fn main() -> anyhow::Result<()> {
         if let Some(target) = gr.group.targets.first() {
             if let Some(snap) = repo.get_state(*target, gr.metadata.window_id, SnapshotProfile::Basic) {
                 let impact = impact_eval.evaluate_group(&gr.group, &[], &snap);
-                if let Some(verdict) = detector.analyze_group(&gr.group) {
-                    println!("  Possível ataque MEV com confiança {:.2}", verdict.confidence);
-                    for at in verdict.attack_types {
-                        println!("    - {:?}", at);
-                    }
-                } else {
-                    println!("  Nenhum ataque evidente identificado");
-                }
                 println!("  Score de oportunidade: {:.2}", impact.opportunity_score);
             }
         }
