@@ -8,6 +8,8 @@
 
 **Foco:** Reconhecimento de agrupamentos exploráveis com cálculo de slippage, convexidade e estimativa de backrun.
 
+*Não inclui detecção de bots MEV concorrentes*
+
 ---
 
 ## ✦ Descrição Geral
@@ -42,18 +44,12 @@ Calcula impacto econômico esperado de um grupo.
 - Convexidade e simulação leve de curva constante ou Uniswap V3
 - Produz `opportunity_score` e `expected_profit_backrun`
 
-### 5. **AttackDetector**
-Aplica heurísticas para detectar padrões de ataque.
-- Frontrun, sandwich, spoof, backrun
-- Cross-chain, flash loan, múltiplos tokens e cenários L2
-- Combinações de sinais geram `AttackVerdict` com nível de confiança
-
-### 6. **RpcStateProvider**
+### 5. **RpcStateProvider**
 Interface de acesso ao estado via RPC com cache embutido e fallback opcional.
 - Métodos `reserves()` e `slot0()` com LRU cache
 - Suporta múltiplos providers para tolerância a falhas
 
-### 7. **MempoolSupervisor**
+### 6. **MempoolSupervisor**
 Orquestrador do ciclo completo.
 - Ajusta TTL de transações e modo de operação (Normal/Burst/Recovery)
 - Gere janelas de avaliação sincronizadas com a altura do bloco
@@ -67,8 +63,7 @@ Orquestrador do ciclo completo.
 2. **Agrupamento** – `TxAggregator` junta transações compatíveis em grupos.
 3. **Snapshot de Estado** – `StateSnapshotRepository` coleta reserves e slot0 via `RpcStateProvider`.
 4. **Avaliação de Impacto** – `StateImpactEvaluator` estima lucro e risco considerando slippage histórica e convexidade.
-5. **Detecção de Ataque** – `AttackDetector` procura padrões de frontrun, sandwich, spoofing ou flash loan.
-6. **Supervisão** – `MempoolSupervisor` coordena essas etapas, adaptando janelas conforme o volume (por exemplo, redes como BSC com blocos rápidos).
+5. **Supervisão** – `MempoolSupervisor` coordena essas etapas, adaptando janelas conforme o volume (por exemplo, redes como BSC com blocos rápidos).
 
 O resultado final inclui tokens analisados, métricas de slippage e um `opportunity_score` que indica a viabilidade econômica de executar um ataque MEV.
 
@@ -89,8 +84,7 @@ O resultado final inclui tokens analisados, métricas de slippage e um `opportun
     }
   ],
   "opportunity_score": 0.83,
-  "expectedProfitBackrun": 47.2,
-  "attack_detected": false
+  "expectedProfitBackrun": 47.2
 }
 ```
 

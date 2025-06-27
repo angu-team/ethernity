@@ -2,7 +2,7 @@ use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use ethereum_types::Address;
 use ethernity_core::types::TransactionHash;
-use crate::{AnnotatedTx, TxGroup, StateSnapshot, GroupImpact, AttackVerdict};
+use crate::{AnnotatedTx, TxGroup, StateSnapshot, GroupImpact};
 use tokio::sync::mpsc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,10 +27,6 @@ pub struct ImpactEvent {
     pub impact: GroupImpact,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ThreatEvent {
-    pub verdict: AttackVerdict,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlockMetadata {
