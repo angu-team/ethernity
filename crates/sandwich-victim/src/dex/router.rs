@@ -1,7 +1,8 @@
 use anyhow::Result;
 use ethereum_types::{Address, U256};
 use ethers::abi::{AbiParser, Token};
-use ethers::prelude::*;
+use ethernity_core::traits::RpcProvider;
+use anyhow::anyhow;
 
 /// Informações sobre o router detectado
 #[derive(Debug, Clone)]
@@ -14,8 +15,7 @@ pub struct RouterInfo {
 /// Identifica dinamicamente o router utilizado na transação
 pub async fn identify_router<P>(provider: &P, addr: Address) -> Result<RouterInfo>
 where
-    P: Middleware,
-    <P as Middleware>::Error: 'static,
+    P: RpcProvider + Sync,
 {
     const UNISWAP_V2_BYTES: [u8; 20] = [
         0x7a, 0x25, 0x0d, 0x56, 0x30, 0xb4, 0xcf, 0x53,
@@ -39,15 +39,12 @@ where
     // tenta obter a factory para confirmar ser um router
     let factory_abi = AbiParser::default()
         .parse_function("factory() view returns (address)")?;
-    let req = ethers::types::TransactionRequest {
-        to: Some(NameOrAddress::Address(addr)),
-        data: Some(factory_abi.encode_input(&[])? .into()),
-        ..Default::default()
-    };
-    let call_res = provider.call(&req.into(), None).await;
+    let call_res = provider
+        .call(addr, factory_abi.encode_input(&[])? .into())
+        .await;
     let factory = match call_res {
         Ok(out) => {
-            let tokens = factory_abi.decode_output(&out.0)?;
+            let tokens = factory_abi.decode_output(&out)?;
             Some(tokens[0].clone().into_address().unwrap())
         }
         Err(_) => None,
@@ -60,12 +57,11 @@ where
         Token::Uint(U256::one()),
         Token::Array(vec![Token::Address(addr), Token::Address(addr)]),
     ])?;
-    let req = ethers::types::TransactionRequest {
-        to: Some(NameOrAddress::Address(addr)),
-        data: Some(test_data.into()),
-        ..Default::default()
-    };
-    let _ = provider.call(&req.into(), None).await.ok();
+    let _ = provider
+        .call(addr, test_data.into())
+        .await
+        .map_err(|e| anyhow!(e))
+        .ok();
 
     Ok(RouterInfo {
         address: addr,

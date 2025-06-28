@@ -7,16 +7,22 @@ use crate::types::{AnalysisResult, Metrics, TransactionData};
 use crate::core::metrics::{simulate_sandwich_profit, U256Ext};
 use anyhow::{anyhow, Result};
 use ethers::abi::{AbiParser, Token};
-use ethers::prelude::*;
 use ethers::utils::keccak256;
+use ethernity_core::traits::RpcProvider;
+use std::sync::Arc;
 use ethereum_types::{Address, U256, H256};
-use std::time::Duration;
 
 
 
-pub async fn analyze_transaction(rpc_endpoint: String, tx: TransactionData) -> Result<AnalysisResult> {
-    let provider = Provider::<Http>::try_from(rpc_endpoint.clone())?.interval(Duration::from_millis(100));
-    let router: RouterInfo = identify_router(&provider, tx.to).await?;
+pub async fn analyze_transaction<P>(
+    rpc_client: Arc<P>,
+    rpc_endpoint: String,
+    tx: TransactionData,
+) -> Result<AnalysisResult>
+where
+    P: RpcProvider + Send + Sync + 'static,
+{
+    let router: RouterInfo = identify_router(&*rpc_client, tx.to).await?;
 
     let sim_config = SimulationConfig {
         rpc_endpoint,
@@ -86,26 +92,22 @@ pub async fn analyze_transaction(rpc_endpoint: String, tx: TransactionData) -> R
         let abi = AbiParser::default()
             .parse_function("getAmountsOut(uint256,address[]) returns (uint256[])")?;
         let data = abi.encode_input(&[Token::Uint(a_in), Token::Array(path_tokens.clone())])?;
-        let req = ethers::types::TransactionRequest {
-            to: Some(NameOrAddress::Address(tx.to)),
-            data: Some(data.into()),
-            ..Default::default()
-        };
-        let call = provider.call(&req.into(), None).await?;
-        let out_tokens = abi.decode_output(&call.0)?;
+        let call = rpc_client
+            .call(tx.to, data.into())
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let out_tokens = abi.decode_output(&call)?;
         let out = out_tokens[0].clone().into_array().unwrap().last().unwrap().clone().into_uint().unwrap();
         (Some(out), None)
     } else if let Some(a_out) = amount_out {
         let abi = AbiParser::default()
             .parse_function("getAmountsIn(uint256,address[]) returns (uint256[])")?;
         let data = abi.encode_input(&[Token::Uint(a_out), Token::Array(path_tokens.clone())])?;
-        let req = ethers::types::TransactionRequest {
-            to: Some(NameOrAddress::Address(tx.to)),
-            data: Some(data.into()),
-            ..Default::default()
-        };
-        let call = provider.call(&req.into(), None).await?;
-        let in_tokens = abi.decode_output(&call.0)?;
+        let call = rpc_client
+            .call(tx.to, data.into())
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let in_tokens = abi.decode_output(&call)?;
         let inp = in_tokens[0].clone().into_array().unwrap().first().unwrap().clone().into_uint().unwrap();
         (None, Some(inp))
     } else {
@@ -146,12 +148,12 @@ pub async fn analyze_transaction(rpc_endpoint: String, tx: TransactionData) -> R
     };
 
     let pair_address = if let Some(factory) = router.factory {
-        get_pair_address(&provider, factory, path[0], path[1]).await?
+        get_pair_address(&*rpc_client, factory, path[0], path[1]).await?
     } else {
         return Err(anyhow!("router não fornece fábrica"));
     };
 
-    let (reserve_in, reserve_out) = get_pair_reserves(&provider, pair_address).await?;
+    let (reserve_in, reserve_out) = get_pair_reserves(&*rpc_client, pair_address).await?;
     let min_tokens_to_affect = reserve_in / U256::from(100u64);
     let input_for_profit = amount_in.unwrap_or(actual_in);
     let potential_profit = simulate_sandwich_profit(input_for_profit, reserve_in, reserve_out);

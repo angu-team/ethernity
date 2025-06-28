@@ -17,6 +17,8 @@ dashmap = { workspace = true }
 rlp = "0.5"
 parking_lot = { workspace = true }
 serde_json = { workspace = true }
+ethernity-core = { path = "../ethernity-core" }
+ethernity-rpc = { path = "../ethernity-rpc" }
 
 # Dependência para simulação local
 anvil = "0.3"

@@ -3352,6 +3352,8 @@ dependencies = [
  "anyhow",
  "dashmap",
  "ethereum-types",
+ "ethernity-core",
+ "ethernity-rpc",
  "ethers",
  "parking_lot",
  "rlp",
