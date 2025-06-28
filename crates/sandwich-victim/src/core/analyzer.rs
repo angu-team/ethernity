@@ -1,6 +1,6 @@
 use crate::dex::{
     detect_swap_function, get_pair_address, get_pair_reserves, identify_router,
-    RouterInfo, SwapFunction,
+    router_from_logs, RouterInfo, SwapFunction,
 };
 use crate::simulation::{simulate_transaction, SimulationConfig, SimulationOutcome};
 use crate::types::{AnalysisResult, Metrics, TransactionData};
@@ -22,13 +22,15 @@ pub async fn analyze_transaction<P>(
 where
     P: RpcProvider + Send + Sync + 'static,
 {
-    let router: RouterInfo = identify_router(&*rpc_client, tx.to).await?;
-
     let sim_config = SimulationConfig {
         rpc_endpoint,
         block_number: None,
     };
     let SimulationOutcome { tx_hash, logs } = simulate_transaction(&sim_config, &tx).await?;
+
+    let router_address = router_from_logs(&logs)
+        .ok_or_else(|| anyhow!("router não encontrado nos logs"))?;
+    let router: RouterInfo = identify_router(&*rpc_client, router_address).await?;
 
     let (swap_kind, function) = detect_swap_function(&tx.data)
         .ok_or_else(|| anyhow!("função swap não reconhecida"))?;
@@ -93,7 +95,7 @@ where
             .parse_function("getAmountsOut(uint256,address[]) returns (uint256[])")?;
         let data = abi.encode_input(&[Token::Uint(a_in), Token::Array(path_tokens.clone())])?;
         let call = rpc_client
-            .call(tx.to, data.into())
+            .call(router.address, data.into())
             .await
             .map_err(|e| anyhow!(e))?;
         let out_tokens = abi.decode_output(&call)?;
@@ -104,7 +106,7 @@ where
             .parse_function("getAmountsIn(uint256,address[]) returns (uint256[])")?;
         let data = abi.encode_input(&[Token::Uint(a_out), Token::Array(path_tokens.clone())])?;
         let call = rpc_client
-            .call(tx.to, data.into())
+            .call(router.address, data.into())
             .await
             .map_err(|e| anyhow!(e))?;
         let in_tokens = abi.decode_output(&call)?;

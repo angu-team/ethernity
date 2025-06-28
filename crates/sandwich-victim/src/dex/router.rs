@@ -1,6 +1,8 @@
 use anyhow::Result;
-use ethereum_types::{Address, U256};
+use ethereum_types::{Address, U256, H256};
 use ethers::abi::{AbiParser, Token};
+use ethers::types::Log;
+use ethers::utils::keccak256;
 use ethernity_core::traits::RpcProvider;
 use anyhow::anyhow;
 
@@ -17,24 +19,8 @@ pub async fn identify_router<P>(provider: &P, addr: Address) -> Result<RouterInf
 where
     P: RpcProvider + Sync,
 {
-    const UNISWAP_V2_BYTES: [u8; 20] = [
-        0x7a, 0x25, 0x0d, 0x56, 0x30, 0xb4, 0xcf, 0x53,
-        0x97, 0x39, 0xdf, 0x2c, 0x5d, 0xac, 0xb4, 0xc6,
-        0x59, 0xf2, 0x48, 0x8d,
-    ];
-    const SUSHI_V2_BYTES: [u8; 20] = [
-        0xd9, 0xe1, 0xce, 0x17, 0xf2, 0x64, 0x1f, 0x24,
-        0xae, 0x83, 0x63, 0x7a, 0xb6, 0x6a, 0x2c, 0xca,
-        0x9c, 0x37, 0x8b, 0x9f,
-    ];
-
-    let name = if addr == Address::from(UNISWAP_V2_BYTES) {
-        Some("UniswapV2".to_string())
-    } else if addr == Address::from(SUSHI_V2_BYTES) {
-        Some("SushiSwap".to_string())
-    } else {
-        None
-    };
+    // identificação genérica sem dependência de constantes "chumbadas"
+    let name = None;
 
     // tenta obter a factory para confirmar ser um router
     let factory_abi = AbiParser::default()
@@ -68,4 +54,17 @@ where
         name,
         factory,
     })
+}
+
+/// Tenta extrair o endereço do router a partir dos logs de simulação
+pub fn router_from_logs(logs: &[Log]) -> Option<Address> {
+    let swap_sig = H256::from_slice(
+        keccak256("Swap(address,uint256,uint256,uint256,uint256,address)").as_slice(),
+    );
+    for log in logs {
+        if log.topics.get(0) == Some(&swap_sig) && log.topics.len() > 1 {
+            return Some(Address::from_slice(&log.topics[1].as_bytes()[12..]));
+        }
+    }
+    None
 }
