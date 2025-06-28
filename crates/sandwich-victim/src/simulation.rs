@@ -30,23 +30,25 @@ pub async fn simulate_transaction(
             .fork(config.rpc_endpoint.clone())
             .spawn();
 
-        let provider = Provider::<Http>::try_from(anvil.endpoint())?.interval(Duration::from_millis(1));
-        let wallet: LocalWallet = anvil.keys()[0].clone().into();
-        let client = SignerMiddleware::new(provider, wallet);
-        let pending = client
-            .send_transaction(
-                TransactionRequest::new()
-                    .from(tx.from)
-                    .to(tx.to)
-                    .data(tx.data.clone())
-                    .value(tx.value)
-                    .gas(tx.gas)
-                    .gas_price(tx.gas_price)
-                    .nonce(tx.nonce),
-                None,
-            )
+        let provider = Provider::<Http>::try_from(anvil.endpoint())?
+            .interval(Duration::from_millis(1));
+
+        provider
+            .request::<_, ()>("anvil_impersonateAccount", [tx.from])
             .await?;
-        let receipt = pending.await?
+
+        let tx_request = TransactionRequest::new()
+            .from(tx.from)
+            .to(tx.to)
+            .data(tx.data.clone())
+            .value(tx.value)
+            .gas(tx.gas)
+            .gas_price(tx.gas_price)
+            .nonce(tx.nonce);
+
+        let pending = provider.send_transaction(tx_request, None).await?;
+        let receipt = pending
+            .await?
             .ok_or_else(|| anyhow!("transação não minerada"))?;
         Ok(SimulationOutcome {
             tx_hash: Some(receipt.transaction_hash),
