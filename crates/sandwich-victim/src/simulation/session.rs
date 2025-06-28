@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use crate::simulation::error::{Result, SimulationError};
 use ethers::prelude::*;
 use std::sync::Arc;
 use parking_lot::Mutex;
@@ -20,7 +20,7 @@ impl Session {
             .fork_block_number(block)
             .spawn();
         let provider = Provider::<Http>::try_from(anvil.endpoint())
-            .context("falha ao criar provider do anvil")?
+            .map_err(|e| SimulationError::ProviderCreation(e.to_string()))?
             .interval(Duration::from_millis(1));
         Ok(Session { provider, _anvil: anvil, block, last_used: Instant::now() })
     }
