@@ -134,6 +134,10 @@ async fn main() -> anyhow::Result<()> {
 
     // Avaliador de impacto econômico
     let repo_dir = std::env::temp_dir().join("mev_example_db");
+    if repo_dir.exists() {
+        // Remove banco de dados antigo para evitar erro de lock
+        std::fs::remove_dir_all(&repo_dir)?;
+    }
     let repo = StateSnapshotRepository::open(rpc.clone(), &repo_dir)?;
     let mut impact_eval = StateImpactEvaluator::default();
 
