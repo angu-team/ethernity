@@ -47,7 +47,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let rpc_client = Arc::new(EthernityRpcClient::new(RpcConfig { endpoint: rpc.clone(), ..Default::default() }).await?);
-    let result = analyze_transaction(rpc_client, rpc, tx, fetched.block_number.map(|b| b.as_u64())).await?;
+    let result = analyze_transaction(rpc_client, rpc, tx, fetched.block_number.map(|b| b.as_u64() - 1)).await?;
     println!("Potencial vítima: {}", result.potential_victim);
     println!("Economicamente viável: {}", result.economically_viable);
     println!("Slippage: {:.4}", result.metrics.slippage);
