@@ -3350,6 +3350,7 @@ version = "0.1.0"
 dependencies = [
  "anvil",
  "anyhow",
+ "async-trait",
  "dashmap",
  "ethereum-types",
  "ethernity-core",
