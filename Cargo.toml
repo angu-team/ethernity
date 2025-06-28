@@ -7,6 +7,7 @@ members = [
     "crates/ethernity-finder",
     "crates/ethernity-fingerprint",
     "crates/ethernity-detector-mev",
+    "crates/sandwich-victim",
 ]
 
 [workspace.package]

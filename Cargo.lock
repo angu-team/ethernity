@@ -81,6 +81,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "anvil"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e29d3ca6c44fd6bc23219f6441303e329ee44580d3cee160df9c5d205e8fc83"
+dependencies = [
+ "thiserror 2.0.12",
+]
+
+[[package]]
 name = "anyhow"
 version = "1.0.98"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3438,6 +3447,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "sandwich-victim"
+version = "0.1.0"
+dependencies = [
+ "anvil",
+ "anyhow",
+ "ethereum-types",
+ "ethers",
+ "serde",
+ "tokio",
 ]
 
 [[package]]

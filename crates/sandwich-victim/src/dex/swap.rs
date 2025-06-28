@@ -1,0 +1,76 @@
+use ethers::abi::{AbiParser, Function};
+use serde::{Deserialize, Serialize};
+
+/// Funções de swap suportadas em routers compatíveis com Uniswap V2
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SwapFunction {
+    SwapExactTokensForTokens,
+    SwapTokensForExactTokens,
+    SwapExactETHForTokens,
+    SwapTokensForExactETH,
+    SwapExactTokensForETH,
+    ETHForExactTokens,
+    SwapExactTokensForTokensSupportingFeeOnTransferTokens,
+    SwapExactETHForTokensSupportingFeeOnTransferTokens,
+    SwapExactTokensForETHSupportingFeeOnTransferTokens,
+}
+
+impl SwapFunction {
+    fn signature(&self) -> &'static str {
+        match self {
+            SwapFunction::SwapExactTokensForTokens => {
+                "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)"
+            }
+            SwapFunction::SwapTokensForExactTokens => {
+                "swapTokensForExactTokens(uint256,uint256,address[],address,uint256)"
+            }
+            SwapFunction::SwapExactETHForTokens => {
+                "swapExactETHForTokens(uint256,address[],address,uint256)"
+            }
+            SwapFunction::SwapTokensForExactETH => {
+                "swapTokensForExactETH(uint256,uint256,address[],address,uint256)"
+            }
+            SwapFunction::SwapExactTokensForETH => {
+                "swapExactTokensForETH(uint256,uint256,address[],address,uint256)"
+            }
+            SwapFunction::ETHForExactTokens => {
+                "swapETHForExactTokens(uint256,address[],address,uint256)"
+            }
+            SwapFunction::SwapExactTokensForTokensSupportingFeeOnTransferTokens => {
+                "swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256,uint256,address[],address,uint256)"
+            }
+            SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens => {
+                "swapExactETHForTokensSupportingFeeOnTransferTokens(uint256,address[],address,uint256)"
+            }
+            SwapFunction::SwapExactTokensForETHSupportingFeeOnTransferTokens => {
+                "swapExactTokensForETHSupportingFeeOnTransferTokens(uint256,uint256,address[],address,uint256)"
+            }
+        }
+    }
+}
+
+/// Identifica qual função de swap foi invocada
+pub fn detect_swap_function(data: &[u8]) -> Option<(SwapFunction, Function)> {
+    if data.len() < 4 {
+        return None;
+    }
+    let selector = &data[..4];
+    let mut parser = AbiParser::default();
+    for func in [
+        SwapFunction::SwapExactTokensForTokens,
+        SwapFunction::SwapTokensForExactTokens,
+        SwapFunction::SwapExactETHForTokens,
+        SwapFunction::SwapTokensForExactETH,
+        SwapFunction::SwapExactTokensForETH,
+        SwapFunction::ETHForExactTokens,
+        SwapFunction::SwapExactTokensForTokensSupportingFeeOnTransferTokens,
+        SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens,
+        SwapFunction::SwapExactTokensForETHSupportingFeeOnTransferTokens,
+    ] {
+        let f = parser.parse_function(func.signature()).expect("abi parse");
+        if selector == f.short_signature() {
+            return Some((func, f));
+        }
+    }
+    None
+}
