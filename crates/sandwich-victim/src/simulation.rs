@@ -43,8 +43,7 @@ pub async fn simulate_transaction(
             .data(tx.data.clone())
             .value(tx.value)
             .gas(tx.gas)
-            .gas_price(tx.gas_price)
-            .nonce(tx.nonce);
+            .gas_price(tx.gas_price);
 
         let pending = provider.send_transaction(tx_request, None).await?;
         let receipt = pending

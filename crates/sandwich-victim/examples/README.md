@@ -1,11 +1,30 @@
 # Exemplos - sandwich-victim
 
-Este exemplo demonstra como utilizar a crate para analisar uma transação e verificar se ela pode ser vítima de um ataque *sandwich*.
+Este diretório contém um pequeno utilitário de linha de comando para
+analisar uma transação e verificar se ela é potencial vítima de um ataque
+*sandwich*.
 
-Execute o exemplo informando o endpoint RPC e o hash da transação que deseja analisar. Certifique-se de habilitar a feature `anvil`:
+Primeiro crie um arquivo JSON descrevendo a transação que deseja inspecionar.
+O formato segue a estrutura de `TransactionData` da biblioteca, por exemplo:
 
-```bash
-cargo run -p sandwich-victim --example analyze_tx --features anvil -- <RPC_ENDPOINT> <TX_HASH>
+```json
+{
+  "from": "0x...",
+  "to": "0x...",
+  "data": "0x...",
+  "value": "0x0",
+  "gas": 21000,
+  "gas_price": "0x0",
+  "nonce": "0x0"
+}
 ```
 
-O programa obtém os dados da transação via RPC, executa-a em um fork local com o `anvil` e imprime as métricas calculadas.
+Em seguida execute o exemplo informando o endpoint RPC e o caminho do arquivo.
+Não se esqueça de habilitar a feature `anvil`:
+
+```bash
+cargo run -p sandwich-victim --example analyze_tx --features anvil -- <RPC_ENDPOINT> <arquivo.json>
+```
+
+O programa carrega os dados do arquivo, executa a transação em um fork local
+com o `anvil` e imprime as métricas calculadas.

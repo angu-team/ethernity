@@ -1,9 +1,9 @@
-//! Analisa uma transação buscada por hash em um endpoint RPC.
+//! Analisa uma transação fornecida em um arquivo JSON utilizando um endpoint RPC.
 //!
 //! É necessário compilar com a feature `anvil`:
 //!
 //! ```bash
-//! cargo run -p sandwich-victim --example analyze_tx --features anvil -- <RPC_ENDPOINT> <TX_HASH>
+//! cargo run -p sandwich-victim --example analyze_tx --features anvil -- <RPC_ENDPOINT> <ARQUIVO_JSON>
 //! ```
 
 #![cfg_attr(not(feature = "anvil"), allow(unused))]
@@ -12,41 +12,23 @@
 compile_error!("Este exemplo requer a feature 'anvil'. Utilize --features anvil");
 
 use std::env;
-use std::str::FromStr;
+use std::fs;
 
 use sandwich_victim::analysis::analyze_transaction;
 use sandwich_victim::types::TransactionData;
-use ethers::prelude::*;
-use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
-        eprintln!("Uso: {} <RPC_ENDPOINT> <TX_HASH>", args[0]);
-        eprintln!("Exemplo: {} https://mainnet.infura.io/v3/YOURKEY 0x...", args[0]);
+        eprintln!("Uso: {} <RPC_ENDPOINT> <ARQUIVO_JSON>", args[0]);
+        eprintln!("Exemplo: {} https://mainnet.infura.io/v3/YOURKEY tx.json", args[0]);
         std::process::exit(1);
     }
 
     let rpc = args[1].clone();
-    let tx_hash = H256::from_str(&args[2])?;
-
-    let provider = Provider::<Http>::try_from(rpc.clone())?.interval(Duration::from_millis(100));
-    let fetched = provider
-        .get_transaction(tx_hash)
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("transação não encontrada"))?;
-
-    let to = fetched.to.ok_or_else(|| anyhow::anyhow!("campo 'to' ausente"))?;
-    let tx = TransactionData {
-        from: fetched.from,
-        to,
-        data: fetched.input.0.to_vec(),
-        value: fetched.value,
-        gas: fetched.gas.as_u64(),
-        gas_price: fetched.gas_price.unwrap_or_default(),
-        nonce: fetched.nonce.into(),
-    };
+    let json = fs::read_to_string(&args[2])?;
+    let tx: TransactionData = serde_json::from_str(&json)?;
 
     let result = analyze_transaction(rpc, tx).await?;
 
