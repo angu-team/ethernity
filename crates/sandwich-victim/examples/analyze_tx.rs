@@ -9,7 +9,7 @@
 use std::env;
 use std::time::Duration;
 
-use sandwich_victim::analysis::analyze_transaction;
+use sandwich_victim::core::analyze_transaction;
 use sandwich_victim::types::TransactionData;
 use ethers::prelude::*;
 use anyhow::anyhow;

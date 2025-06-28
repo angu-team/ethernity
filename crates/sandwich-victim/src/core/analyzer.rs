@@ -1,7 +1,10 @@
-use crate::dex::{identify_router, detect_swap_function, RouterInfo, SwapFunction};
+use crate::dex::{
+    detect_swap_function, get_pair_address, get_pair_reserves, identify_router,
+    RouterInfo, SwapFunction,
+};
 use crate::simulation::{simulate_transaction, SimulationConfig, SimulationOutcome};
 use crate::types::{AnalysisResult, Metrics, TransactionData};
-use crate::utils::{simulate_sandwich_profit, U256Ext};
+use crate::core::metrics::{simulate_sandwich_profit, U256Ext};
 use anyhow::{anyhow, Result};
 use ethers::abi::{AbiParser, Token};
 use ethers::prelude::*;
@@ -9,8 +12,6 @@ use ethers::utils::keccak256;
 use ethereum_types::{Address, U256, H256};
 use std::time::Duration;
 
-pub mod onchain;
-use onchain::{get_pair_address, get_pair_reserves};
 
 
 pub async fn analyze_transaction(rpc_endpoint: String, tx: TransactionData) -> Result<AnalysisResult> {

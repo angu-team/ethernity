@@ -13,6 +13,10 @@ serde = { workspace = true, features = ["derive"] }
 ethereum-types = { workspace = true }
 ethers = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+dashmap = { workspace = true }
+rlp = "0.5"
+parking_lot = { workspace = true }
+serde_json = { workspace = true }
 
 # Dependência para simulação local
 anvil = "0.3"

@@ -11,9 +11,11 @@ Biblioteca para detectar oportunidades de ataque *sandwich* em transações Ethe
 
 A arquitetura segue o princípio de responsabilidade única. Cada módulo possui
 uma função clara:
-`simulation` executa a transação em um fork local, `dex` traz utilidades para
-roteadores e funções de swap, `analysis` coleta métricas on-chain e `types` guarda
-as estruturas de dados. Assim o código fica organizado e fácil de manter.
+`core` contém o analisador de transações e cálculo de métricas,
+`simulation` gerencia sessões reutilizáveis do Anvil,
+`dex` provê decodificação e consultas on-chain,
+`client` abstrai chamadas RPC com cache simples e
+`types` define as estruturas de dados. Assim o código fica organizado e fácil de manter.
 
 O código expõe funções assíncronas e pode ser extendido com novos métodos de avaliação.
 
