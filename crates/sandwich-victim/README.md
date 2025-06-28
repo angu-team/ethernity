@@ -19,5 +19,5 @@ O código expõe funções assíncronas e pode ser extendido com novos métodos 
 
 
 Consulte o diretório [examples](./examples/) para um exemplo de uso via linha de
-comando. O utilitário lê uma transação de um arquivo JSON. Lembre-se de
-habilitar a feature `anvil` ao compilar.
+comando. O utilitário recebe um hash de transação e busca os dados em um node
+RPC. Lembre-se de habilitar a feature `anvil` ao compilar.

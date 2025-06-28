@@ -17,8 +17,6 @@ tokio = { workspace = true, features = ["full"] }
 # Dependência opcional para simulação local
 anvil = { version = "0.3", optional = true }
 
-[dev-dependencies]
-serde_json = { workspace = true }
 
 [features]
 default = []
