@@ -24,7 +24,7 @@ pub async fn simulate_transaction(
 ) -> Result<SimulationOutcome> {
     #[cfg(feature = "anvil")]
     {
-        use anvil::Anvil;
+        use ethers::utils::Anvil;
 
         let anvil = Anvil::new()
             .fork(config.rpc_endpoint.clone())
@@ -46,7 +46,8 @@ pub async fn simulate_transaction(
                 None,
             )
             .await?;
-        let receipt = pending.await?;
+        let receipt = pending.await?
+            .ok_or_else(|| anyhow!("transação não minerada"))?;
         Ok(SimulationOutcome {
             tx_hash: Some(receipt.transaction_hash),
             logs: receipt.logs,
