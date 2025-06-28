@@ -18,14 +18,16 @@ pub async fn analyze_transaction<P>(
     rpc_client: Arc<P>,
     rpc_endpoint: String,
     tx: TransactionData,
+    block: Option<u64>
 ) -> Result<AnalysisResult>
 where
     P: RpcProvider + Send + Sync + 'static,
 {
     let sim_config = SimulationConfig {
         rpc_endpoint,
-        block_number: None,
+        block_number: block,
     };
+    println!("{:?}",sim_config);
     let SimulationOutcome { tx_hash, logs } = simulate_transaction(&sim_config, &tx).await?;
 
     let router_address = router_from_logs(&logs)
