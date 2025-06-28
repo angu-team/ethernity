@@ -22,6 +22,9 @@ ethernity-rpc = { path = "../ethernity-rpc" }
 
 # Dependência para simulação local
 anvil = "0.3"
+[dev-dependencies]
+async-trait = { workspace = true }
+
 
 
 [features]
