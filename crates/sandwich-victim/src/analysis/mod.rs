@@ -17,7 +17,10 @@ pub async fn analyze_transaction(rpc_endpoint: String, tx: TransactionData) -> R
     let provider = Provider::<Http>::try_from(rpc_endpoint.clone())?.interval(Duration::from_millis(100));
     let router: RouterInfo = identify_router(&provider, tx.to).await?;
 
-    let sim_config = SimulationConfig { rpc_endpoint };
+    let sim_config = SimulationConfig {
+        rpc_endpoint,
+        block_number: None,
+    };
     let SimulationOutcome { tx_hash, logs } = simulate_transaction(&sim_config, &tx).await?;
 
     let (swap_kind, function) = detect_swap_function(&tx.data)

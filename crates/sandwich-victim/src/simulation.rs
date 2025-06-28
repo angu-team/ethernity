@@ -1,13 +1,13 @@
-use crate::types::{TransactionData};
-use anyhow::{Result, anyhow};
+use crate::types::TransactionData;
+use anyhow::{anyhow, Context, Result};
 use ethers::prelude::*;
-#[cfg(feature = "anvil")]
 use std::time::Duration;
 
 /// Configurações para a simulação local
 #[derive(Debug, Clone)]
 pub struct SimulationConfig {
     pub rpc_endpoint: String,
+    pub block_number: Option<u64>,
 }
 
 /// Resultado simples da simulação
@@ -22,42 +22,43 @@ pub async fn simulate_transaction(
     config: &SimulationConfig,
     tx: &TransactionData,
 ) -> Result<SimulationOutcome> {
-    #[cfg(feature = "anvil")]
-    {
-        use ethers::utils::Anvil;
+    use ethers::utils::Anvil;
 
-        let anvil = Anvil::new()
-            .fork(config.rpc_endpoint.clone())
-            .spawn();
-
-        let provider = Provider::<Http>::try_from(anvil.endpoint())?
-            .interval(Duration::from_millis(1));
-
-        provider
-            .request::<_, ()>("anvil_impersonateAccount", [tx.from])
-            .await?;
-
-        let tx_request = TransactionRequest::new()
-            .from(tx.from)
-            .to(tx.to)
-            .data(tx.data.clone())
-            .value(tx.value)
-            .gas(tx.gas)
-            .gas_price(tx.gas_price);
-
-        let pending = provider.send_transaction(tx_request, None).await?;
-        let receipt = pending
-            .await?
-            .ok_or_else(|| anyhow!("transação não minerada"))?;
-        Ok(SimulationOutcome {
-            tx_hash: Some(receipt.transaction_hash),
-            logs: receipt.logs,
-        })
+    let mut anvil = Anvil::new().fork(config.rpc_endpoint.clone());
+    if let Some(block) = config.block_number {
+        anvil = anvil.fork_block_number(block);
     }
-    #[cfg(not(feature = "anvil"))]
-    {
-        let _ = config;
-        let _ = tx;
-        Err(anyhow!("anvil feature not enabled"))
-    }
+    let anvil = anvil.spawn();
+
+    let provider = Provider::<Http>::try_from(anvil.endpoint())
+        .context("falha ao criar provider do anvil")?
+        .interval(Duration::from_millis(1));
+
+    provider
+        .request::<_, ()>("anvil_impersonateAccount", [tx.from])
+        .await
+        .context("falha ao impersonar conta")?;
+
+    let tx_request = TransactionRequest::new()
+        .from(tx.from)
+        .to(tx.to)
+        .data(tx.data.clone())
+        .value(tx.value)
+        .gas(tx.gas)
+        .gas_price(tx.gas_price)
+        .nonce(tx.nonce);
+
+    let pending = provider
+        .send_transaction(tx_request, None)
+        .await
+        .context("falha ao enviar transação")?;
+    let receipt = pending
+        .await
+        .context("erro ao aguardar mineração")?
+        .ok_or_else(|| anyhow!("transação não minerada"))?;
+
+    Ok(SimulationOutcome {
+        tx_hash: Some(receipt.transaction_hash),
+        logs: receipt.logs,
+    })
 }
