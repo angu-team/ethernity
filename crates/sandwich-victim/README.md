@@ -17,3 +17,7 @@ as estruturas de dados. Assim o código fica organizado e fácil de manter.
 
 O código expõe funções assíncronas e pode ser extendido com novos métodos de avaliação.
 
+
+Consulte o diretório [examples](./examples/) para um exemplo de uso via linha de
+comando. O utilitário recebe um hash de transação e busca os dados em um node
+RPC. Lembre-se de habilitar a feature `anvil` ao compilar.
