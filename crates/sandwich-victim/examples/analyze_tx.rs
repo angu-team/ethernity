@@ -12,6 +12,8 @@ use std::time::Duration;
 use sandwich_victim::core::analyze_transaction;
 use sandwich_victim::types::TransactionData;
 use ethers::prelude::*;
+use ethernity_rpc::{EthernityRpcClient, RpcConfig};
+use std::sync::Arc;
 use anyhow::anyhow;
 
 #[tokio::main]
@@ -44,7 +46,8 @@ async fn main() -> anyhow::Result<()> {
         nonce: fetched.nonce,
     };
 
-    let result = analyze_transaction(rpc, tx).await?;
+    let rpc_client = Arc::new(EthernityRpcClient::new(RpcConfig { endpoint: rpc.clone(), ..Default::default() }).await?);
+    let result = analyze_transaction(rpc_client, rpc, tx).await?;
 
     println!("Potencial vítima: {}", result.potential_victim);
     println!("Economicamente viável: {}", result.economically_viable);
