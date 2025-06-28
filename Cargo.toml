@@ -5,8 +5,6 @@ members = [
     "crates/ethernity-deeptrace",
     "crates/ethernity-rpc",
     "crates/ethernity-finder",
-    "crates/ethernity-fingerprint",
-    "crates/ethernity-detector-mev",
     "crates/sandwich-victim",
 ]
 

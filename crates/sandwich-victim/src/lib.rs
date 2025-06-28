@@ -5,7 +5,10 @@
  */
 
 pub mod types;
+pub mod client {
+    pub mod rpc;
+    pub use rpc::*;
+}
 pub mod simulation;
-pub mod analysis;
 pub mod dex;
-pub mod utils;
+pub mod core;
