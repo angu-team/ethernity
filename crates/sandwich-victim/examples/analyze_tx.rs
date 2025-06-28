@@ -1,15 +1,10 @@
 //! Analisa uma transação identificada por um hash utilizando um endpoint RPC.
 //!
-//! É necessário compilar com a feature `anvil`:
+//! Uso:
 //!
 //! ```bash
-//! cargo run -p sandwich-victim --example analyze_tx --features anvil -- <RPC_ENDPOINT> <TX_HASH>
+//! cargo run -p sandwich-victim --example analyze_tx -- <RPC_ENDPOINT> <TX_HASH>
 //! ```
-
-#![cfg_attr(not(feature = "anvil"), allow(unused))]
-
-#[cfg(not(feature = "anvil"))]
-compile_error!("Este exemplo requer a feature 'anvil'. Utilize --features anvil");
 
 use std::env;
 use std::time::Duration;

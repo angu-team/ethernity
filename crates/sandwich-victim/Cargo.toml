@@ -14,11 +14,10 @@ ethereum-types = { workspace = true }
 ethers = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 
-# Dependência opcional para simulação local
-anvil = { version = "0.3", optional = true }
+# Dependência para simulação local
+anvil = "0.3"
 
 
 [features]
 default = []
-anvil = ["dep:anvil"]
 
