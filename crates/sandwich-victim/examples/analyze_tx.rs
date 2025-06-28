@@ -1,3 +1,16 @@
+//! Analisa uma transação buscada por hash em um endpoint RPC.
+//!
+//! É necessário compilar com a feature `anvil`:
+//!
+//! ```bash
+//! cargo run -p sandwich-victim --example analyze_tx --features anvil -- <RPC_ENDPOINT> <TX_HASH>
+//! ```
+
+#![cfg_attr(not(feature = "anvil"), allow(unused))]
+
+#[cfg(not(feature = "anvil"))]
+compile_error!("Este exemplo requer a feature 'anvil'. Utilize --features anvil");
+
 use std::env;
 use std::str::FromStr;
 

@@ -18,4 +18,4 @@ as estruturas de dados. Assim o código fica organizado e fácil de manter.
 O código expõe funções assíncronas e pode ser extendido com novos métodos de avaliação.
 
 
-Consulte o diretório [examples](./examples/) para um exemplo de uso via linha de comando.
+Consulte o diretório [examples](./examples/) para um exemplo de uso via linha de comando. Para executá-lo, habilite a feature `anvil`.
