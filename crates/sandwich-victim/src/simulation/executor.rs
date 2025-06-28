@@ -1,5 +1,5 @@
 use crate::types::TransactionData;
-use anyhow::{anyhow, Context, Result};
+use crate::simulation::error::{Result, SimulationError};
 use ethers::prelude::*;
 use std::time::Duration;
 
@@ -31,13 +31,13 @@ pub async fn simulate_transaction(
     let anvil = anvil.spawn();
 
     let provider = Provider::<Http>::try_from(anvil.endpoint())
-        .context("falha ao criar provider do anvil")?
+        .map_err(|e| SimulationError::ProviderCreation(e.to_string()))?
         .interval(Duration::from_millis(1));
 
     provider
         .request::<_, ()>("anvil_impersonateAccount", [tx.from])
         .await
-        .context("falha ao impersonar conta")?;
+        .map_err(|e| SimulationError::ImpersonateAccount(e.to_string()))?;
 
     let tx_request = TransactionRequest::new()
         .from(tx.from)
@@ -51,11 +51,11 @@ pub async fn simulate_transaction(
     let pending = provider
         .send_transaction(tx_request, None)
         .await
-        .context("falha ao enviar transação")?;
+        .map_err(|e| SimulationError::SendTransaction(e.to_string()))?;
     let receipt = pending
         .await
-        .context("erro ao aguardar mineração")?
-        .ok_or_else(|| anyhow!("transação não minerada"))?;
+        .map_err(|e| SimulationError::AwaitMining(e.to_string()))?
+        .ok_or(SimulationError::TransactionNotMined)?;
 
     Ok(SimulationOutcome {
         tx_hash: Some(receipt.transaction_hash),

@@ -9,6 +9,7 @@ license.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+thiserror = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 ethereum-types = { workspace = true }
 ethers = { workspace = true }
