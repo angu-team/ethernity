@@ -6,7 +6,7 @@ Biblioteca para detectar oportunidades de ataque *sandwich* em transações Ethe
 - slippage real comparado com a cotação esperada
 - quantidade mínima de tokens capaz de afetar o preço
 - lucro potencial de uma estratégia de front‑run e back‑run
-- identificação dinâmica do router envolvido
+- identificação dinâmica do router envolvido (extraído exclusivamente dos logs da simulação)
 - reconhecimento de todas as variações de funções de swap V2
 
 A arquitetura segue o princípio de responsabilidade única. Cada módulo possui
