@@ -1,5 +1,5 @@
-use ethers::abi::{AbiParser, Function, Token};
 use ethereum_types::U256;
+use ethers::abi::{AbiParser, Function, Token};
 use serde::{Deserialize, Serialize};
 
 /// Funções de swap suportadas em routers compatíveis com Uniswap V2
@@ -108,10 +108,10 @@ pub fn decode_universal_execute(data: &[u8]) -> Option<(SwapFunction, Vec<Token>
                     return Some((
                         SwapFunction::SwapExactTokensForTokens,
                         vec![
-                            raw[1].clone(), // amountIn
-                            raw[2].clone(), // amountOutMin
-                            raw[3].clone(), // path
-                            raw[0].clone(), // recipient
+                            raw[1].clone(),            // amountIn
+                            raw[2].clone(),            // amountOutMin
+                            raw[3].clone(),            // path
+                            raw[0].clone(),            // recipient
                             Token::Uint(U256::zero()), // placeholder deadline
                         ],
                     ));
@@ -126,10 +126,10 @@ pub fn decode_universal_execute(data: &[u8]) -> Option<(SwapFunction, Vec<Token>
                     return Some((
                         SwapFunction::SwapTokensForExactTokens,
                         vec![
-                            raw[1].clone(), // amountOut
-                            raw[2].clone(), // amountInMax
-                            raw[3].clone(), // path
-                            raw[0].clone(), // recipient
+                            raw[1].clone(),            // amountOut
+                            raw[2].clone(),            // amountInMax
+                            raw[3].clone(),            // path
+                            raw[0].clone(),            // recipient
                             Token::Uint(U256::zero()), // placeholder deadline
                         ],
                     ));
@@ -139,4 +139,18 @@ pub fn decode_universal_execute(data: &[u8]) -> Option<(SwapFunction, Vec<Token>
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hex_literal::hex;
+
+    #[test]
+    fn decode_universal_execute_example() {
+        let data = hex!("3593564c000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000686153e100000000000000000000000000000000000000000000000000000000000000020b080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000006f05b59d3b200000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000006f05b59d3b20000000000000000000000000000000000000000002f34a30f1105cb9653a942000000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c00000000000000000000000071b53c2da92a2c888110a54c6548cac86f6074ac");
+        let (func, tokens) = decode_universal_execute(&data).expect("decode");
+        assert_eq!(func, SwapFunction::SwapExactTokensForTokens);
+        assert_eq!(tokens.len(), 5);
+    }
 }

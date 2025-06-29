@@ -25,6 +25,7 @@ ethernity-rpc = { path = "../ethernity-rpc" }
 anvil = "0.3"
 [dev-dependencies]
 async-trait = { workspace = true }
+hex-literal = "0.4"
 
 
 
