@@ -1,27 +1,25 @@
+use crate::core::metrics::{simulate_sandwich_profit, U256Ext};
 use crate::dex::{
-    detect_swap_function, get_pair_address, identify_router,
+    decode_universal_execute, detect_swap_function, get_pair_address, identify_router,
     router_from_logs, RouterInfo, SwapFunction,
 };
 use crate::simulation::{simulate_transaction, SimulationConfig, SimulationOutcome};
 use crate::types::{AnalysisResult, Metrics, TransactionData};
-use crate::core::metrics::{simulate_sandwich_profit, U256Ext};
 use anyhow::{anyhow, Result};
-use ethers::abi::{AbiParser, Token};
-use ethers::utils::keccak256;
-use ethers::prelude::{Provider, Http, Middleware, TransactionRequest};
-use ethers::types::BlockId;
-use std::time::Duration;
+use ethereum_types::{Address, H256, U256};
 use ethernity_core::traits::RpcProvider;
+use ethers::abi::{AbiParser, Token};
+use ethers::prelude::{Http, Middleware, Provider, TransactionRequest};
+use ethers::types::BlockId;
+use ethers::utils::keccak256;
 use std::sync::Arc;
-use ethereum_types::{Address, U256, H256};
-
-
+use std::time::Duration;
 
 pub async fn analyze_transaction<P>(
     rpc_client: Arc<P>,
     rpc_endpoint: String,
     tx: TransactionData,
-    block: Option<u64>
+    block: Option<u64>,
 ) -> Result<AnalysisResult>
 where
     P: RpcProvider + Send + Sync + 'static,
@@ -30,16 +28,20 @@ where
         rpc_endpoint,
         block_number: block,
     };
-    println!("{:?}",sim_config);
+    println!("{:?}", sim_config);
     let SimulationOutcome { tx_hash, logs } = simulate_transaction(&sim_config, &tx).await?;
 
-    let router_address = router_from_logs(&logs)
-        .ok_or_else(|| anyhow!("router não encontrado nos logs"))?;
+    let router_address =
+        router_from_logs(&logs).ok_or_else(|| anyhow!("router não encontrado nos logs"))?;
     let router: RouterInfo = identify_router(&*rpc_client, router_address).await?;
 
-    let (swap_kind, function) = detect_swap_function(&tx.data)
-        .ok_or_else(|| anyhow!("função swap não reconhecida"))?;
-    let tokens = function.decode_input(&tx.data[4..])?;
+    let (swap_kind, tokens) = if let Some((kind, func)) = detect_swap_function(&tx.data) {
+        (kind, func.decode_input(&tx.data[4..])?)
+    } else if let Some((kind, toks)) = decode_universal_execute(&tx.data) {
+        (kind, toks)
+    } else {
+        return Err(anyhow!("função swap não reconhecida"));
+    };
 
     let (amount_in, amount_out, amount_in_max, amount_out_min, path) = match swap_kind {
         SwapFunction::SwapExactTokensForTokens
@@ -103,25 +105,45 @@ where
         let abi = AbiParser::default()
             .parse_function("getAmountsOut(uint256,address[]) returns (uint256[])")?;
         let data = abi.encode_input(&[Token::Uint(a_in), Token::Array(path_tokens.clone())])?;
-        let tx_call = TransactionRequest::new().to(router.address).data(data.clone());
+        let tx_call = TransactionRequest::new()
+            .to(router.address)
+            .data(data.clone());
         let call = provider
             .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
             .await
             .map_err(|e| anyhow!(e))?;
         let out_tokens = abi.decode_output(&call)?;
-        let out = out_tokens[0].clone().into_array().unwrap().last().unwrap().clone().into_uint().unwrap();
+        let out = out_tokens[0]
+            .clone()
+            .into_array()
+            .unwrap()
+            .last()
+            .unwrap()
+            .clone()
+            .into_uint()
+            .unwrap();
         (Some(out), None)
     } else if let Some(a_out) = amount_out {
         let abi = AbiParser::default()
             .parse_function("getAmountsIn(uint256,address[]) returns (uint256[])")?;
         let data = abi.encode_input(&[Token::Uint(a_out), Token::Array(path_tokens.clone())])?;
-        let tx_call = TransactionRequest::new().to(router.address).data(data.clone());
+        let tx_call = TransactionRequest::new()
+            .to(router.address)
+            .data(data.clone());
         let call = provider
             .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
             .await
             .map_err(|e| anyhow!(e))?;
         let in_tokens = abi.decode_output(&call)?;
-        let inp = in_tokens[0].clone().into_array().unwrap().first().unwrap().clone().into_uint().unwrap();
+        let inp = in_tokens[0]
+            .clone()
+            .into_array()
+            .unwrap()
+            .first()
+            .unwrap()
+            .clone()
+            .into_uint()
+            .unwrap();
         (None, Some(inp))
     } else {
         (None, None)
