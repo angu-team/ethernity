@@ -56,13 +56,14 @@ async fn main() -> Result<()> {
         };
 
         match analyze_transaction(rpc_client.clone(), ws_url.clone(), tx_data, None).await {
-            Ok(result) if result.potential_victim => {
+            Ok(Some(result)) if result.potential_victim => {
                 println!("Possível vítima: {:?}", tx.hash);
                 println!("Slippage: {:.4}", result.metrics.slippage);
                 println!("Router: {:?}", result.metrics.router_name);
                 println!("Rota de tokens: {:?}", result.metrics.token_route);
             }
-            Ok(_) => {}
+            Ok(Some(_)) => {}
+            Ok(None) => {}
             Err(err) => {
                 eprintln!("Falha ao analisar tx {:?}: {err}", tx.hash);
             }
