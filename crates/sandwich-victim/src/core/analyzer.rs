@@ -48,50 +48,54 @@ where
         | SwapFunction::SwapExactTokensForETH
         | SwapFunction::SwapExactTokensForTokensSupportingFeeOnTransferTokens
         | SwapFunction::SwapExactTokensForETHSupportingFeeOnTransferTokens => {
-            let amount_in = tokens[0].clone().into_uint().unwrap();
-            let amount_out_min = tokens[1].clone().into_uint().unwrap();
-            let path: Vec<Address> = tokens[2]
-                .clone()
-                .into_array()
-                .unwrap()
-                .into_iter()
-                .map(|t| t.into_address().unwrap())
-                .collect();
+            if tokens.len() < 3 {
+                return Err(anyhow!("parâmetros insuficientes"));
+            }
+            let amount_in = tokens[0].clone().into_uint().ok_or_else(|| anyhow!("amount_in inválido"))?;
+            let amount_out_min = tokens[1].clone().into_uint().ok_or_else(|| anyhow!("amount_out_min inválido"))?;
+            let path_tokens = tokens[2].clone().into_array().ok_or_else(|| anyhow!("rota inválida"))?;
+            let mut path = Vec::with_capacity(path_tokens.len());
+            for t in path_tokens {
+                path.push(t.into_address().ok_or_else(|| anyhow!("endereço inválido"))?);
+            }
             (Some(amount_in), None, None, Some(amount_out_min), path)
         }
         SwapFunction::SwapTokensForExactTokens | SwapFunction::SwapTokensForExactETH => {
-            let amount_out = tokens[0].clone().into_uint().unwrap();
-            let amount_in_max = tokens[1].clone().into_uint().unwrap();
-            let path: Vec<Address> = tokens[2]
-                .clone()
-                .into_array()
-                .unwrap()
-                .into_iter()
-                .map(|t| t.into_address().unwrap())
-                .collect();
+            if tokens.len() < 3 {
+                return Err(anyhow!("parâmetros insuficientes"));
+            }
+            let amount_out = tokens[0].clone().into_uint().ok_or_else(|| anyhow!("amount_out inválido"))?;
+            let amount_in_max = tokens[1].clone().into_uint().ok_or_else(|| anyhow!("amount_in_max inválido"))?;
+            let path_tokens = tokens[2].clone().into_array().ok_or_else(|| anyhow!("rota inválida"))?;
+            let mut path = Vec::with_capacity(path_tokens.len());
+            for t in path_tokens {
+                path.push(t.into_address().ok_or_else(|| anyhow!("endereço inválido"))?);
+            }
             (None, Some(amount_out), Some(amount_in_max), None, path)
         }
         SwapFunction::SwapExactETHForTokens
         | SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens => {
-            let amount_out_min = tokens[0].clone().into_uint().unwrap();
-            let path: Vec<Address> = tokens[1]
-                .clone()
-                .into_array()
-                .unwrap()
-                .into_iter()
-                .map(|t| t.into_address().unwrap())
-                .collect();
+            if tokens.len() < 2 {
+                return Err(anyhow!("parâmetros insuficientes"));
+            }
+            let amount_out_min = tokens[0].clone().into_uint().ok_or_else(|| anyhow!("amount_out_min inválido"))?;
+            let path_tokens = tokens[1].clone().into_array().ok_or_else(|| anyhow!("rota inválida"))?;
+            let mut path = Vec::with_capacity(path_tokens.len());
+            for t in path_tokens {
+                path.push(t.into_address().ok_or_else(|| anyhow!("endereço inválido"))?);
+            }
             (Some(tx.value), None, None, Some(amount_out_min), path)
         }
         SwapFunction::ETHForExactTokens => {
-            let amount_out = tokens[0].clone().into_uint().unwrap();
-            let path: Vec<Address> = tokens[1]
-                .clone()
-                .into_array()
-                .unwrap()
-                .into_iter()
-                .map(|t| t.into_address().unwrap())
-                .collect();
+            if tokens.len() < 2 {
+                return Err(anyhow!("parâmetros insuficientes"));
+            }
+            let amount_out = tokens[0].clone().into_uint().ok_or_else(|| anyhow!("amount_out inválido"))?;
+            let path_tokens = tokens[1].clone().into_array().ok_or_else(|| anyhow!("rota inválida"))?;
+            let mut path = Vec::with_capacity(path_tokens.len());
+            for t in path_tokens {
+                path.push(t.into_address().ok_or_else(|| anyhow!("endereço inválido"))?);
+            }
             (None, Some(amount_out), Some(tx.value), None, path)
         }
     };
@@ -113,15 +117,11 @@ where
             .await
             .map_err(|e| anyhow!(e))?;
         let out_tokens = abi.decode_output(&call)?;
-        let out = out_tokens[0]
-            .clone()
-            .into_array()
-            .unwrap()
+        let out_arr = out_tokens[0].clone().into_array().ok_or_else(|| anyhow!("retorno inválido"))?;
+        let out = out_arr
             .last()
-            .unwrap()
-            .clone()
-            .into_uint()
-            .unwrap();
+            .and_then(|t| t.clone().into_uint())
+            .ok_or_else(|| anyhow!("valor esperado não encontrado"))?;
         (Some(out), None)
     } else if let Some(a_out) = amount_out {
         let abi = AbiParser::default()
@@ -135,15 +135,11 @@ where
             .await
             .map_err(|e| anyhow!(e))?;
         let in_tokens = abi.decode_output(&call)?;
-        let inp = in_tokens[0]
-            .clone()
-            .into_array()
-            .unwrap()
+        let in_arr = in_tokens[0].clone().into_array().ok_or_else(|| anyhow!("retorno inválido"))?;
+        let inp = in_arr
             .first()
-            .unwrap()
-            .clone()
-            .into_uint()
-            .unwrap();
+            .and_then(|t| t.clone().into_uint())
+            .ok_or_else(|| anyhow!("valor esperado não encontrado"))?;
         (None, Some(inp))
     } else {
         (None, None)
@@ -198,10 +194,15 @@ where
             .await
             .map_err(|e| anyhow!(e))?;
         let tokens = abi.decode_output(&call)?;
-        (
-            tokens[0].clone().into_uint().unwrap(),
-            tokens[1].clone().into_uint().unwrap(),
-        )
+        let reserve_in = tokens
+            .get(0)
+            .and_then(|t| t.clone().into_uint())
+            .ok_or_else(|| anyhow!("reserva inválida"))?;
+        let reserve_out = tokens
+            .get(1)
+            .and_then(|t| t.clone().into_uint())
+            .ok_or_else(|| anyhow!("reserva inválida"))?;
+        (reserve_in, reserve_out)
     };
     let min_tokens_to_affect = reserve_in / U256::from(100u64);
     let input_for_profit = amount_in.unwrap_or(actual_in);
