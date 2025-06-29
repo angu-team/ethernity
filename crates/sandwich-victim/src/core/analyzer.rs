@@ -3,6 +3,7 @@ use crate::dex::{
     router_from_logs, RouterInfo, SwapFunction,
 };
 use crate::simulation::{simulate_transaction, SimulationConfig, SimulationOutcome};
+use crate::filters::{FilterPipeline, SwapLogFilter};
 use crate::types::{AnalysisResult, Metrics, TransactionData};
 use crate::core::metrics::{simulate_sandwich_profit, U256Ext};
 use anyhow::{anyhow, Result};
@@ -30,8 +31,13 @@ where
         rpc_endpoint,
         block_number: block,
     };
-    println!("{:?}",sim_config);
-    let SimulationOutcome { tx_hash, logs } = simulate_transaction(&sim_config, &tx).await?;
+    println!("{:?}", sim_config);
+    let outcome = simulate_transaction(&sim_config, &tx).await?;
+    let outcome = FilterPipeline::new()
+        .push(SwapLogFilter)
+        .run(outcome)
+        .ok_or_else(|| anyhow!("resultado da simulação sem evento Swap"))?;
+    let SimulationOutcome { tx_hash, logs } = outcome;
 
     let router_address = router_from_logs(&logs)
         .ok_or_else(|| anyhow!("router não encontrado nos logs"))?;
