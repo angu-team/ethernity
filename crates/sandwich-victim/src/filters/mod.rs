@@ -1,7 +1,3 @@
-//! Infraestrutura para criação de filtros reutilizáveis para resultados de
-//! simulação. Os filtros podem ser encadeados em um pipeline e cada um decide
-//! se a simulação deve continuar ou ser descartada.
-
 use crate::simulation::SimulationOutcome;
 use ethers::types::H256;
 use std::str::FromStr;
@@ -23,9 +19,7 @@ pub struct FilterPipeline {
 impl FilterPipeline {
     /// Cria pipeline vazio
     pub fn new() -> Self {
-        Self {
-            filters: Vec::new(),
-        }
+        Self { filters: Vec::new() }
     }
 
     /// Adiciona um filtro ao pipeline
@@ -54,11 +48,7 @@ const SWAP_TOPIC: &str = "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d1
 impl Filter for SwapLogFilter {
     fn apply(&self, outcome: SimulationOutcome) -> Option<SimulationOutcome> {
         let topic = H256::from_str(SWAP_TOPIC).expect("valid topic hex");
-        if outcome
-            .logs
-            .iter()
-            .any(|log| log.topics.get(0) == Some(&topic))
-        {
+        if outcome.logs.iter().any(|log| log.topics.get(0) == Some(&topic)) {
             Some(outcome)
         } else {
             None
@@ -85,10 +75,7 @@ mod tests {
             log_type: None,
             removed: None,
         };
-        SimulationOutcome {
-            tx_hash: None,
-            logs: vec![log],
-        }
+        SimulationOutcome { tx_hash: None, logs: vec![log] }
     }
 
     #[test]
@@ -105,3 +92,4 @@ mod tests {
         assert!(pipeline.run(outcome).is_none());
     }
 }
+
