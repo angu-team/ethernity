@@ -1,5 +1,5 @@
 use crate::dex::{
-    detect_swap_function, get_pair_address, get_pair_reserves, identify_router,
+    detect_swap_function, get_pair_address, identify_router,
     router_from_logs, RouterInfo, SwapFunction,
 };
 use crate::simulation::{simulate_transaction, SimulationConfig, SimulationOutcome};
@@ -8,6 +8,9 @@ use crate::core::metrics::{simulate_sandwich_profit, U256Ext};
 use anyhow::{anyhow, Result};
 use ethers::abi::{AbiParser, Token};
 use ethers::utils::keccak256;
+use ethers::prelude::{Provider, Http, Middleware, TransactionRequest};
+use ethers::types::BlockId;
+use std::time::Duration;
 use ethernity_core::traits::RpcProvider;
 use std::sync::Arc;
 use ethereum_types::{Address, U256, H256};
@@ -92,12 +95,17 @@ where
     };
 
     let path_tokens: Vec<Token> = path.iter().map(|a| Token::Address(*a)).collect();
+
+    let provider = Provider::<Http>::try_from(sim_config.rpc_endpoint.clone())?
+        .interval(Duration::from_millis(1));
+
     let (expected_out, expected_in) = if let Some(a_in) = amount_in {
         let abi = AbiParser::default()
             .parse_function("getAmountsOut(uint256,address[]) returns (uint256[])")?;
         let data = abi.encode_input(&[Token::Uint(a_in), Token::Array(path_tokens.clone())])?;
-        let call = rpc_client
-            .call(router.address, data.into())
+        let tx_call = TransactionRequest::new().to(router.address).data(data.clone());
+        let call = provider
+            .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
             .await
             .map_err(|e| anyhow!(e))?;
         let out_tokens = abi.decode_output(&call)?;
@@ -107,8 +115,9 @@ where
         let abi = AbiParser::default()
             .parse_function("getAmountsIn(uint256,address[]) returns (uint256[])")?;
         let data = abi.encode_input(&[Token::Uint(a_out), Token::Array(path_tokens.clone())])?;
-        let call = rpc_client
-            .call(router.address, data.into())
+        let tx_call = TransactionRequest::new().to(router.address).data(data.clone());
+        let call = provider
+            .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
             .await
             .map_err(|e| anyhow!(e))?;
         let in_tokens = abi.decode_output(&call)?;
@@ -157,7 +166,21 @@ where
         return Err(anyhow!("router não fornece fábrica"));
     };
 
-    let (reserve_in, reserve_out) = get_pair_reserves(&*rpc_client, pair_address).await?;
+    let (reserve_in, reserve_out) = {
+        let abi = AbiParser::default()
+            .parse_function("getReserves() returns (uint112,uint112,uint32)")?;
+        let data = abi.encode_input(&[])?;
+        let tx_call = TransactionRequest::new().to(pair_address).data(data);
+        let call = provider
+            .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let tokens = abi.decode_output(&call)?;
+        (
+            tokens[0].clone().into_uint().unwrap(),
+            tokens[1].clone().into_uint().unwrap(),
+        )
+    };
     let min_tokens_to_affect = reserve_in / U256::from(100u64);
     let input_for_profit = amount_in.unwrap_or(actual_in);
     let potential_profit = simulate_sandwich_profit(input_for_profit, reserve_in, reserve_out);
