@@ -3,6 +3,7 @@ use crate::dex::{
     router_from_logs, RouterInfo, SwapFunction,
 };
 use crate::simulation::{simulate_transaction, SimulationConfig, SimulationOutcome};
+use crate::filters::{FilterPipeline, SwapLogFilter};
 use crate::types::{AnalysisResult, Metrics, TransactionData};
 use crate::core::metrics::{simulate_sandwich_profit, U256Ext};
 use anyhow::{anyhow, Result};
@@ -22,7 +23,7 @@ pub async fn analyze_transaction<P>(
     rpc_endpoint: String,
     tx: TransactionData,
     block: Option<u64>
-) -> Result<AnalysisResult>
+) -> Result<Option<AnalysisResult>>
 where
     P: RpcProvider + Send + Sync + 'static,
 {
@@ -30,8 +31,12 @@ where
         rpc_endpoint,
         block_number: block,
     };
-    println!("{:?}",sim_config);
-    let SimulationOutcome { tx_hash, logs } = simulate_transaction(&sim_config, &tx).await?;
+    let outcome = simulate_transaction(&sim_config, &tx).await?;
+    let outcome = match FilterPipeline::new().push(SwapLogFilter).run(outcome) {
+        Some(out) => out,
+        None => return Ok(None),
+    };
+    let SimulationOutcome { tx_hash, logs } = outcome;
 
     let router_address = router_from_logs(&logs)
         .ok_or_else(|| anyhow!("router não encontrado nos logs"))?;
@@ -203,10 +208,10 @@ where
         slippage > 0.0
     };
 
-    Ok(AnalysisResult {
+    Ok(Some(AnalysisResult {
         potential_victim,
         economically_viable: potential_profit > U256::zero(),
         simulated_tx: tx_hash,
         metrics,
-    })
+    }))
 }

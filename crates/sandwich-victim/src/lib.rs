@@ -8,3 +8,4 @@ pub mod types;
 pub mod simulation;
 pub mod dex;
 pub mod core;
+pub mod filters;
