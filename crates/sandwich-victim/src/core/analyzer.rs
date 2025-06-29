@@ -23,7 +23,7 @@ pub async fn analyze_transaction<P>(
     rpc_endpoint: String,
     tx: TransactionData,
     block: Option<u64>
-) -> Result<AnalysisResult>
+) -> Result<Option<AnalysisResult>>
 where
     P: RpcProvider + Send + Sync + 'static,
 {
@@ -31,12 +31,11 @@ where
         rpc_endpoint,
         block_number: block,
     };
-    println!("{:?}", sim_config);
     let outcome = simulate_transaction(&sim_config, &tx).await?;
-    let outcome = FilterPipeline::new()
-        .push(SwapLogFilter)
-        .run(outcome)
-        .ok_or_else(|| anyhow!("resultado da simulação sem evento Swap"))?;
+    let outcome = match FilterPipeline::new().push(SwapLogFilter).run(outcome) {
+        Some(out) => out,
+        None => return Ok(None),
+    };
     let SimulationOutcome { tx_hash, logs } = outcome;
 
     let router_address = router_from_logs(&logs)
@@ -209,10 +208,10 @@ where
         slippage > 0.0
     };
 
-    Ok(AnalysisResult {
+    Ok(Some(AnalysisResult {
         potential_victim,
         economically_viable: potential_profit > U256::zero(),
         simulated_tx: tx_hash,
         metrics,
-    })
+    }))
 }
