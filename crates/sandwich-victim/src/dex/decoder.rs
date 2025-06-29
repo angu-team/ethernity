@@ -1,4 +1,5 @@
 use ethers::abi::{AbiParser, Function, Token};
+use ethereum_types::U256;
 use serde::{Deserialize, Serialize};
 
 /// Funções de swap suportadas em routers compatíveis com Uniswap V2
@@ -102,15 +103,37 @@ pub fn decode_universal_execute(data: &[u8]) -> Option<(SwapFunction, Vec<Token>
                 let f = parser
                     .parse_function("v2SwapExactInput(address,uint256,uint256,address[],address)")
                     .ok()?;
-                let toks = f.decode_input(&inputs.get(idx)?[..]).ok()?;
-                return Some((SwapFunction::SwapExactTokensForTokens, toks));
+                let raw = f.decode_input(&inputs.get(idx)?[..]).ok()?;
+                if raw.len() == 5 {
+                    return Some((
+                        SwapFunction::SwapExactTokensForTokens,
+                        vec![
+                            raw[1].clone(), // amountIn
+                            raw[2].clone(), // amountOutMin
+                            raw[3].clone(), // path
+                            raw[0].clone(), // recipient
+                            Token::Uint(U256::zero()), // placeholder deadline
+                        ],
+                    ));
+                }
             }
             0x09 => {
                 let f = parser
                     .parse_function("v2SwapExactOutput(address,uint256,uint256,address[],address)")
                     .ok()?;
-                let toks = f.decode_input(&inputs.get(idx)?[..]).ok()?;
-                return Some((SwapFunction::SwapTokensForExactTokens, toks));
+                let raw = f.decode_input(&inputs.get(idx)?[..]).ok()?;
+                if raw.len() == 5 {
+                    return Some((
+                        SwapFunction::SwapTokensForExactTokens,
+                        vec![
+                            raw[1].clone(), // amountOut
+                            raw[2].clone(), // amountInMax
+                            raw[3].clone(), // path
+                            raw[0].clone(), // recipient
+                            Token::Uint(U256::zero()), // placeholder deadline
+                        ],
+                    ));
+                }
             }
             _ => {}
         }
