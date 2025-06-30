@@ -1,13 +1,15 @@
-use async_trait::async_trait;
-use crate::types::{AnalysisResult, TransactionData};
-use crate::simulation::SimulationOutcome;
 use crate::dex::RouterInfo;
+use crate::simulation::SimulationOutcome;
+use crate::types::{AnalysisResult, TransactionData};
+use anyhow::Result;
+use async_trait::async_trait;
 use ethernity_core::traits::RpcProvider;
 use std::sync::Arc;
-use anyhow::Result;
 
 pub mod uniswap_v2;
 use uniswap_v2::UniswapV2Detector;
+pub mod pancakeswap_v3;
+use pancakeswap_v3::PancakeSwapV3Detector;
 
 #[async_trait]
 pub trait VictimDetector: Send + Sync {
@@ -29,7 +31,9 @@ pub struct DetectorRegistry {
 
 impl Default for DetectorRegistry {
     fn default() -> Self {
-        Self { detectors: vec![Box::new(UniswapV2Detector)] }
+        Self {
+            detectors: vec![Box::new(UniswapV2Detector), Box::new(PancakeSwapV3Detector)],
+        }
     }
 }
 
@@ -46,11 +50,17 @@ impl DetectorRegistry {
         for d in &self.detectors {
             if d.supports(&router) {
                 return d
-                    .analyze(rpc_client.clone(), rpc_endpoint.clone(), tx.clone(), block, outcome.clone(), router.clone())
+                    .analyze(
+                        rpc_client.clone(),
+                        rpc_endpoint.clone(),
+                        tx.clone(),
+                        block,
+                        outcome.clone(),
+                        router.clone(),
+                    )
                     .await;
             }
         }
         Err(anyhow::anyhow!("unsupported router"))
     }
 }
-

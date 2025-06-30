@@ -1,18 +1,18 @@
-use crate::dex::{detect_swap_function, get_pair_address, RouterInfo, SwapFunction};
-use crate::simulation::{simulate_transaction, SimulationConfig, SimulationOutcome};
-use crate::filters::{FilterPipeline, SwapLogFilter};
-use crate::types::{AnalysisResult, Metrics, TransactionData};
 use crate::core::metrics::{simulate_sandwich_profit, U256Ext};
+use crate::dex::{detect_swap_function, get_pair_address, RouterInfo, SwapFunction};
+use crate::filters::{FilterPipeline, SwapLogFilter};
+use crate::simulation::{simulate_transaction, SimulationConfig, SimulationOutcome};
+use crate::types::{AnalysisResult, Metrics, TransactionData};
 use anyhow::{anyhow, Result};
-use ethers::abi::{AbiParser, Token};
-use ethers::utils::keccak256;
-use ethers::prelude::{Provider, Http, Middleware, TransactionRequest};
-use ethers::types::BlockId;
-use std::time::Duration;
-use ethernity_core::traits::RpcProvider;
-use std::sync::Arc;
-use ethereum_types::{Address, U256, H256};
 use async_trait::async_trait;
+use ethereum_types::{Address, H256, U256};
+use ethernity_core::traits::RpcProvider;
+use ethers::abi::{AbiParser, Token};
+use ethers::prelude::{Http, Middleware, Provider, TransactionRequest};
+use ethers::types::BlockId;
+use ethers::utils::keccak256;
+use std::sync::Arc;
+use std::time::Duration;
 
 pub struct UniswapV2Detector;
 
@@ -53,12 +53,11 @@ pub async fn analyze_uniswap_v2(
         .ok_or(anyhow!("No swap event"))?;
     let SimulationOutcome { tx_hash, logs } = outcome;
 
-    let router_address = crate::dex::router_from_logs(&logs)
-        .ok_or(anyhow!("router not found"))?;
+    let router_address = crate::dex::router_from_logs(&logs).ok_or(anyhow!("router not found"))?;
     let router: RouterInfo = crate::dex::identify_router(&*rpc_client, router_address).await?;
 
-    let (swap_kind, function) = detect_swap_function(&tx.data)
-        .ok_or(anyhow!("unrecognized swap"))?;
+    let (swap_kind, function) =
+        detect_swap_function(&tx.data).ok_or(anyhow!("unrecognized swap"))?;
     let tokens = function.decode_input(&tx.data[4..])?;
 
     let (amount_in, amount_out, amount_in_max, amount_out_min, path) = match swap_kind {
@@ -112,6 +111,7 @@ pub async fn analyze_uniswap_v2(
                 .collect();
             (None, Some(amount_out), Some(tx.value), None, path)
         }
+        _ => return Err(anyhow!("unsupported swap")),
     };
 
     let path_tokens: Vec<Token> = path.iter().map(|a| Token::Address(*a)).collect();
@@ -123,25 +123,45 @@ pub async fn analyze_uniswap_v2(
         let abi = AbiParser::default()
             .parse_function("getAmountsOut(uint256,address[]) returns (uint256[])")?;
         let data = abi.encode_input(&[Token::Uint(a_in), Token::Array(path_tokens.clone())])?;
-        let tx_call = TransactionRequest::new().to(router.address).data(data.clone());
+        let tx_call = TransactionRequest::new()
+            .to(router.address)
+            .data(data.clone());
         let call = provider
             .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
             .await
             .map_err(|e| anyhow!(e))?;
         let out_tokens = abi.decode_output(&call)?;
-        let out = out_tokens[0].clone().into_array().unwrap().last().unwrap().clone().into_uint().unwrap();
+        let out = out_tokens[0]
+            .clone()
+            .into_array()
+            .unwrap()
+            .last()
+            .unwrap()
+            .clone()
+            .into_uint()
+            .unwrap();
         (Some(out), None)
     } else if let Some(a_out) = amount_out {
         let abi = AbiParser::default()
             .parse_function("getAmountsIn(uint256,address[]) returns (uint256[])")?;
         let data = abi.encode_input(&[Token::Uint(a_out), Token::Array(path_tokens.clone())])?;
-        let tx_call = TransactionRequest::new().to(router.address).data(data.clone());
+        let tx_call = TransactionRequest::new()
+            .to(router.address)
+            .data(data.clone());
         let call = provider
             .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
             .await
             .map_err(|e| anyhow!(e))?;
         let in_tokens = abi.decode_output(&call)?;
-        let inp = in_tokens[0].clone().into_array().unwrap().first().unwrap().clone().into_uint().unwrap();
+        let inp = in_tokens[0]
+            .clone()
+            .into_array()
+            .unwrap()
+            .first()
+            .unwrap()
+            .clone()
+            .into_uint()
+            .unwrap();
         (None, Some(inp))
     } else {
         (None, None)
@@ -230,4 +250,3 @@ pub async fn analyze_uniswap_v2(
         metrics,
     })
 }
-
