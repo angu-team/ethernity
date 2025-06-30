@@ -17,7 +17,7 @@ pub struct RouterInfo {
 /// Identifica dinamicamente o router utilizado na transação
 pub async fn identify_router<P>(provider: &P, addr: Address) -> Result<RouterInfo>
 where
-    P: RpcProvider + Sync,
+    P: RpcProvider + Sync + ?Sized,
 {
     // identificação genérica sem dependência de constantes "chumbadas"
     let name = None;

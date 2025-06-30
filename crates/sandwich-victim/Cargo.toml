@@ -21,11 +21,11 @@ serde_json = { workspace = true }
 futures = { workspace = true }
 ethernity-core = { path = "../ethernity-core" }
 ethernity-rpc = { path = "../ethernity-rpc" }
+async-trait = { workspace = true }
 
 # Dependência para simulação local
 anvil = "0.3"
 [dev-dependencies]
-async-trait = { workspace = true }
 
 
 
