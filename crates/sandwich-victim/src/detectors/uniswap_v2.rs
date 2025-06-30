@@ -56,14 +56,19 @@ pub async fn analyze_uniswap_v2(
     let router_address = crate::dex::router_from_logs(&logs).ok_or(anyhow!("router not found"))?;
     let router: RouterInfo = crate::dex::identify_router(&*rpc_client, router_address).await?;
 
+    use std::collections::HashSet;
+
     let deposit_topic: H256 = H256::from_slice(keccak256("Deposit(address,uint256)").as_slice());
-    let deposit_token = logs.iter().find_map(|log| {
-        if log.topics.get(0) == Some(&deposit_topic) {
-            Some(log.address)
-        } else {
-            None
-        }
-    });
+    let deposit_tokens: HashSet<Address> = logs
+        .iter()
+        .filter(|log| log.topics.get(0) == Some(&deposit_topic))
+        .map(|log| log.address)
+        .collect();
+    let deposit_token = if deposit_tokens.len() == 1 {
+        deposit_tokens.iter().next().copied()
+    } else {
+        None
+    };
 
     let (swap_kind, function) =
         detect_swap_function(&tx.data).ok_or(anyhow!("unrecognized swap"))?;
@@ -137,8 +142,10 @@ pub async fn analyze_uniswap_v2(
             }
             SwapFunction::SwapV2ExactIn => {
                 let mut token_in = tokens[0].clone().into_address().unwrap();
-                if let Some(deposit) = deposit_token {
-                    token_in = deposit;
+                if token_in == Address::zero() {
+                    if let Some(deposit) = deposit_token {
+                        token_in = deposit;
+                    }
                 }
                 let token_out = tokens[1].clone().into_address().unwrap();
                 let amount_in = tokens[2].clone().into_uint().unwrap();
