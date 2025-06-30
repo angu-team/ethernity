@@ -85,6 +85,10 @@ pub fn detect_swap_function(data: &[u8]) -> Option<(SwapFunction, Function)> {
         (SwapFunction::SwapExactTokensForTokensSupportingFeeOnTransferTokens, "swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256,uint256,address[],address,uint256)"),
         (SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens, "swapExactETHForTokensSupportingFeeOnTransferTokens(uint256,address[],address,uint256)"),
         (SwapFunction::SwapExactTokensForETHSupportingFeeOnTransferTokens, "swapExactTokensForETHSupportingFeeOnTransferTokens(uint256,uint256,address[],address,uint256)"),
+        (SwapFunction::ExactInputSingle, "exactInputSingle((address,address,uint24,address,uint256,uint256,uint256,uint160))"),
+        (SwapFunction::ExactInput, "exactInput((bytes,address,uint256,uint256,uint256))"),
+        (SwapFunction::ExactOutputSingle, "exactOutputSingle((address,address,uint24,address,uint256,uint256,uint256,uint160))"),
+        (SwapFunction::ExactOutput, "exactOutput((bytes,address,uint256,uint256,uint256))"),
         (SwapFunction::SwapV2ExactIn, "swapV2ExactIn(address,address,uint256,uint256,address)"),
     ];
     for (func, sig) in mappings {
