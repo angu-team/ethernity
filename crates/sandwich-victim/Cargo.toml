@@ -22,6 +22,7 @@ futures = { workspace = true }
 ethernity-core = { path = "../ethernity-core" }
 ethernity-rpc = { path = "../ethernity-rpc" }
 async-trait = { workspace = true }
+once_cell = "1"
 
 # Dependência para simulação local
 anvil = "0.3"

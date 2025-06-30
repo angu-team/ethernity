@@ -64,3 +64,4 @@ impl DetectorRegistry {
         Err(anyhow::anyhow!("unsupported router"))
     }
 }
+
