@@ -3357,6 +3357,7 @@ dependencies = [
  "ethernity-rpc",
  "ethers",
  "futures",
+ "hex",
  "once_cell",
  "parking_lot",
  "rlp",

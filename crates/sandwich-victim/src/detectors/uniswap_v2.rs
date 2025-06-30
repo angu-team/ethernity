@@ -1,4 +1,4 @@
-use crate::core::metrics::{simulate_sandwich_profit, U256Ext};
+use crate::core::metrics::{simulate_sandwich_profit, U256Ext, constant_product_output};
 use crate::dex::{detect_swap_function, get_pair_address, RouterInfo, SwapFunction};
 use crate::filters::{FilterPipeline, SwapLogFilter};
 use crate::simulation::{simulate_transaction, SimulationConfig, SimulationOutcome};
@@ -60,7 +60,7 @@ pub async fn analyze_uniswap_v2(
         detect_swap_function(&tx.data).ok_or(anyhow!("unrecognized swap"))?;
     let tokens = function.decode_input(&tx.data[4..])?;
 
-    let (amount_in, amount_out, amount_in_max, amount_out_min, path) = match swap_kind {
+    let (amount_in, amount_out, amount_in_max, amount_out_min, path, pair_addr_opt) = match swap_kind {
         SwapFunction::SwapExactTokensForTokens
         | SwapFunction::SwapExactTokensForETH
         | SwapFunction::SwapExactTokensForTokensSupportingFeeOnTransferTokens
@@ -74,7 +74,7 @@ pub async fn analyze_uniswap_v2(
                 .into_iter()
                 .map(|t| t.into_address().unwrap())
                 .collect();
-            (Some(amount_in), None, None, Some(amount_out_min), path)
+            (Some(amount_in), None, None, Some(amount_out_min), path, None)
         }
         SwapFunction::SwapTokensForExactTokens | SwapFunction::SwapTokensForExactETH => {
             let amount_out = tokens[0].clone().into_uint().unwrap();
@@ -86,7 +86,7 @@ pub async fn analyze_uniswap_v2(
                 .into_iter()
                 .map(|t| t.into_address().unwrap())
                 .collect();
-            (None, Some(amount_out), Some(amount_in_max), None, path)
+            (None, Some(amount_out), Some(amount_in_max), None, path, None)
         }
         SwapFunction::SwapExactETHForTokens
         | SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens => {
@@ -98,7 +98,7 @@ pub async fn analyze_uniswap_v2(
                 .into_iter()
                 .map(|t| t.into_address().unwrap())
                 .collect();
-            (Some(tx.value), None, None, Some(amount_out_min), path)
+            (Some(tx.value), None, None, Some(amount_out_min), path, None)
         }
         SwapFunction::ETHForExactTokens => {
             let amount_out = tokens[0].clone().into_uint().unwrap();
@@ -109,7 +109,16 @@ pub async fn analyze_uniswap_v2(
                 .into_iter()
                 .map(|t| t.into_address().unwrap())
                 .collect();
-            (None, Some(amount_out), Some(tx.value), None, path)
+            (None, Some(amount_out), Some(tx.value), None, path, None)
+        }
+        SwapFunction::SwapV2ExactIn => {
+            let token_in = tokens[0].clone().into_address().unwrap();
+            let token_out = tokens[1].clone().into_address().unwrap();
+            let amount_in = tokens[2].clone().into_uint().unwrap();
+            let amount_out_min = tokens[3].clone().into_uint().unwrap();
+            let pair = tokens[4].clone().into_address().unwrap();
+            let path = vec![token_in, token_out];
+            (Some(amount_in), None, None, Some(amount_out_min), path, Some(pair))
         }
         _ => return Err(anyhow!("unsupported swap")),
     };
@@ -119,28 +128,84 @@ pub async fn analyze_uniswap_v2(
     let provider = Provider::<Http>::try_from(sim_config.rpc_endpoint.clone())?
         .interval(Duration::from_millis(1));
 
-    let (expected_out, expected_in) = if let Some(a_in) = amount_in {
+    let pair_address = if let Some(addr) = pair_addr_opt {
+        addr
+    } else if let Some(factory) = router.factory {
+        get_pair_address(&*rpc_client, factory, path[0], path[1]).await?
+    } else {
+        return Err(anyhow!("router does not expose factory"));
+    };
+
+    let (token0, token1, reserve0, reserve1) = {
         let abi = AbiParser::default()
-            .parse_function("getAmountsOut(uint256,address[]) returns (uint256[])")?;
-        let data = abi.encode_input(&[Token::Uint(a_in), Token::Array(path_tokens.clone())])?;
-        let tx_call = TransactionRequest::new()
-            .to(router.address)
-            .data(data.clone());
+            .parse_function("token0() view returns (address)")?;
+        let data = abi.encode_input(&[])?;
+        let tx_call = TransactionRequest::new().to(pair_address).data(data.clone());
         let call = provider
             .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
             .await
             .map_err(|e| anyhow!(e))?;
-        let out_tokens = abi.decode_output(&call)?;
-        let out = out_tokens[0]
-            .clone()
-            .into_array()
-            .unwrap()
-            .last()
-            .unwrap()
-            .clone()
-            .into_uint()
-            .unwrap();
-        (Some(out), None)
+        let token0 = abi.decode_output(&call)?[0].clone().into_address().unwrap();
+
+        let abi1 = AbiParser::default()
+            .parse_function("token1() view returns (address)")?;
+        let data1 = abi1.encode_input(&[])?;
+        let tx_call = TransactionRequest::new().to(pair_address).data(data1.clone());
+        let call = provider
+            .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let token1 = abi1.decode_output(&call)?[0].clone().into_address().unwrap();
+
+        let abi_res = AbiParser::default()
+            .parse_function("getReserves() returns (uint112,uint112,uint32)")?;
+        let data_res = abi_res.encode_input(&[])?;
+        let tx_call = TransactionRequest::new().to(pair_address).data(data_res);
+        let call = provider
+            .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
+            .await
+            .map_err(|e| anyhow!(e))?;
+        let tokens = abi_res.decode_output(&call)?;
+        (
+            token0,
+            token1,
+            tokens[0].clone().into_uint().unwrap(),
+            tokens[1].clone().into_uint().unwrap(),
+        )
+    };
+
+    let (reserve_in, reserve_out) = if token0 == path[1] {
+        (reserve1, reserve0)
+    } else {
+        (reserve0, reserve1)
+    };
+
+    let (expected_out, expected_in) = if let Some(a_in) = amount_in {
+        if pair_addr_opt.is_some() {
+            (Some(constant_product_output(a_in, reserve_in, reserve_out)), None)
+        } else {
+            let abi = AbiParser::default()
+                .parse_function("getAmountsOut(uint256,address[]) returns (uint256[])")?;
+            let data = abi.encode_input(&[Token::Uint(a_in), Token::Array(path_tokens.clone())])?;
+            let tx_call = TransactionRequest::new()
+                .to(router.address)
+                .data(data.clone());
+            let call = provider
+                .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
+                .await
+                .map_err(|e| anyhow!(e))?;
+            let out_tokens = abi.decode_output(&call)?;
+            let out = out_tokens[0]
+                .clone()
+                .into_array()
+                .unwrap()
+                .last()
+                .unwrap()
+                .clone()
+                .into_uint()
+                .unwrap();
+            (Some(out), None)
+        }
     } else if let Some(a_out) = amount_out {
         let abi = AbiParser::default()
             .parse_function("getAmountsIn(uint256,address[]) returns (uint256[])")?;
@@ -200,27 +265,6 @@ pub async fn analyze_uniswap_v2(
         0.0
     };
 
-    let pair_address = if let Some(factory) = router.factory {
-        get_pair_address(&*rpc_client, factory, path[0], path[1]).await?
-    } else {
-        return Err(anyhow!("router does not expose factory"));
-    };
-
-    let (reserve_in, reserve_out) = {
-        let abi = AbiParser::default()
-            .parse_function("getReserves() returns (uint112,uint112,uint32)")?;
-        let data = abi.encode_input(&[])?;
-        let tx_call = TransactionRequest::new().to(pair_address).data(data);
-        let call = provider
-            .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
-            .await
-            .map_err(|e| anyhow!(e))?;
-        let tokens = abi.decode_output(&call)?;
-        (
-            tokens[0].clone().into_uint().unwrap(),
-            tokens[1].clone().into_uint().unwrap(),
-        )
-    };
     let min_tokens_to_affect = reserve_in / U256::from(100u64);
     let input_for_profit = amount_in.unwrap_or(actual_in);
     let potential_profit = simulate_sandwich_profit(input_for_profit, reserve_in, reserve_out);

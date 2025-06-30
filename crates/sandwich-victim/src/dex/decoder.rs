@@ -17,6 +17,7 @@ pub enum SwapFunction {
     ExactInput,
     ExactOutputSingle,
     ExactOutput,
+    SwapV2ExactIn,
 }
 
 impl SwapFunction {
@@ -61,6 +62,9 @@ impl SwapFunction {
             SwapFunction::ExactOutput => {
                 "exactOutput((bytes,address,uint256,uint256,uint256))"
             }
+            SwapFunction::SwapV2ExactIn => {
+                "swapV2ExactIn(address,address,uint256,uint256,address)"
+            }
         }
     }
 }
@@ -71,24 +75,22 @@ pub fn detect_swap_function(data: &[u8]) -> Option<(SwapFunction, Function)> {
         return None;
     }
     let selector = &data[..4];
-    let mut parser = AbiParser::default();
-    for func in [
-        SwapFunction::SwapExactTokensForTokens,
-        SwapFunction::SwapTokensForExactTokens,
-        SwapFunction::SwapExactETHForTokens,
-        SwapFunction::SwapTokensForExactETH,
-        SwapFunction::SwapExactTokensForETH,
-        SwapFunction::ETHForExactTokens,
-        SwapFunction::SwapExactTokensForTokensSupportingFeeOnTransferTokens,
-        SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens,
-        SwapFunction::SwapExactTokensForETHSupportingFeeOnTransferTokens,
-        SwapFunction::ExactInputSingle,
-        SwapFunction::ExactInput,
-        SwapFunction::ExactOutputSingle,
-        SwapFunction::ExactOutput,
-    ] {
-        let f = parser.parse_function(func.signature()).expect("abi parse");
-        if selector == f.short_signature() {
+    let mappings = [
+        (SwapFunction::SwapExactTokensForTokens, "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)"),
+        (SwapFunction::SwapTokensForExactTokens, "swapTokensForExactTokens(uint256,uint256,address[],address,uint256)"),
+        (SwapFunction::SwapExactETHForTokens, "swapExactETHForTokens(uint256,address[],address,uint256)"),
+        (SwapFunction::SwapTokensForExactETH, "swapTokensForExactETH(uint256,uint256,address[],address,uint256)"),
+        (SwapFunction::SwapExactTokensForETH, "swapExactTokensForETH(uint256,uint256,address[],address,uint256)"),
+        (SwapFunction::ETHForExactTokens, "swapETHForExactTokens(uint256,address[],address,uint256)"),
+        (SwapFunction::SwapExactTokensForTokensSupportingFeeOnTransferTokens, "swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256,uint256,address[],address,uint256)"),
+        (SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens, "swapExactETHForTokensSupportingFeeOnTransferTokens(uint256,address[],address,uint256)"),
+        (SwapFunction::SwapExactTokensForETHSupportingFeeOnTransferTokens, "swapExactTokensForETHSupportingFeeOnTransferTokens(uint256,uint256,address[],address,uint256)"),
+        (SwapFunction::SwapV2ExactIn, "swapV2ExactIn(address,address,uint256,uint256,address)"),
+    ];
+    for (func, sig) in mappings {
+        if selector == &ethers::utils::id(sig)[..4] {
+            let mut parser = AbiParser::default();
+            let f = parser.parse_function(sig).expect("abi parse");
             return Some((func, f));
         }
     }
