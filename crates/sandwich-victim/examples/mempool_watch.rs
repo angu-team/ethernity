@@ -64,7 +64,7 @@ async fn main() -> Result<()> {
             }
             Ok(_) => {}
             Err(err) => {
-                eprintln!("Falha ao analisar tx {:?}: {err}", tx.hash);
+                // eprintln!("Falha ao analisar tx {:?}: {err}", tx.hash);
             }
         }
     }

@@ -16,6 +16,22 @@ use ethernity_core::traits::RpcProvider;
 use std::sync::Arc;
 use ethereum_types::{Address, U256, H256};
 
+// Primeiro, defina um enum para seus erros (coloque isso no início do arquivo ou em um módulo de erros)
+use std::error::Error as StdError;
+
+#[derive(Debug, thiserror::Error)]
+enum AnalysisError {
+    #[error("No swap event found")]
+    NoSwapEvent,
+    #[error("Router not found in logs")]
+    NoRouterFound,
+    #[error("Unrecognized swap function")]
+    UnrecognizedSwap,
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+// Agora o AnalysisError implementa automaticamente Error através do thiserror
 
 
 pub async fn analyze_transaction<P>(
@@ -31,20 +47,21 @@ where
         rpc_endpoint,
         block_number: block,
     };
-    println!("{:?}", sim_config);
+
     let outcome = simulate_transaction(&sim_config, &tx).await?;
+    // Então modifique as linhas que usam anyhow para usar seu próprio tipo de erro
     let outcome = FilterPipeline::new()
         .push(SwapLogFilter)
         .run(outcome)
-        .ok_or_else(|| anyhow!("resultado da simulação sem evento Swap"))?;
+        .ok_or(AnalysisError::NoSwapEvent)?;
     let SimulationOutcome { tx_hash, logs } = outcome;
 
     let router_address = router_from_logs(&logs)
-        .ok_or_else(|| anyhow!("router não encontrado nos logs"))?;
+        .ok_or(AnalysisError::NoRouterFound)?;
     let router: RouterInfo = identify_router(&*rpc_client, router_address).await?;
 
     let (swap_kind, function) = detect_swap_function(&tx.data)
-        .ok_or_else(|| anyhow!("função swap não reconhecida"))?;
+        .ok_or(AnalysisError::UnrecognizedSwap)?;
     let tokens = function.decode_input(&tx.data[4..])?;
 
     let (amount_in, amount_out, amount_in_max, amount_out_min, path) = match swap_kind {
