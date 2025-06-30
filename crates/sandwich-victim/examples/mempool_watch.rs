@@ -40,7 +40,7 @@ async fn main() -> Result<()> {
         let tx = match res {
             Ok(tx) => tx,
             Err(err) => {
-                eprintln!("Erro ao obter transação: {err}");
+                // eprintln!("Erro ao obter transação: {err}");
                 continue;
             }
         };
