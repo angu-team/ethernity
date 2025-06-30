@@ -32,7 +32,7 @@ pub struct DetectorRegistry {
 impl Default for DetectorRegistry {
     fn default() -> Self {
         Self {
-            detectors: vec![Box::new(UniswapV2Detector), Box::new(PancakeSwapV3Detector)],
+            detectors: vec![Box::new(PancakeSwapV3Detector), Box::new(UniswapV2Detector)],
         }
     }
 }
@@ -64,3 +64,4 @@ impl DetectorRegistry {
         Err(anyhow::anyhow!("unsupported router"))
     }
 }
+

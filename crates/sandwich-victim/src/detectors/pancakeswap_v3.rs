@@ -12,8 +12,8 @@ pub struct PancakeSwapV3Detector;
 
 #[async_trait]
 impl crate::detectors::VictimDetector for PancakeSwapV3Detector {
-    fn supports(&self, router: &RouterInfo) -> bool {
-        router.factory.is_none()
+    fn supports(&self, _router: &RouterInfo) -> bool {
+        true
     }
 
     async fn analyze(
