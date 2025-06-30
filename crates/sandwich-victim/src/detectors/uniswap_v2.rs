@@ -1,4 +1,4 @@
-use crate::core::metrics::{simulate_sandwich_profit, U256Ext, constant_product_output};
+use crate::core::metrics::{constant_product_output, simulate_sandwich_profit, U256Ext};
 use crate::dex::{detect_swap_function, get_pair_address, RouterInfo, SwapFunction};
 use crate::filters::{FilterPipeline, SwapLogFilter};
 use crate::simulation::{simulate_transaction, SimulationConfig, SimulationOutcome};
@@ -56,72 +56,106 @@ pub async fn analyze_uniswap_v2(
     let router_address = crate::dex::router_from_logs(&logs).ok_or(anyhow!("router not found"))?;
     let router: RouterInfo = crate::dex::identify_router(&*rpc_client, router_address).await?;
 
+    let deposit_topic: H256 = H256::from_slice(keccak256("Deposit(address,uint256)").as_slice());
+    let deposit_token = logs.iter().find_map(|log| {
+        if log.topics.get(0) == Some(&deposit_topic) {
+            Some(log.address)
+        } else {
+            None
+        }
+    });
+
     let (swap_kind, function) =
         detect_swap_function(&tx.data).ok_or(anyhow!("unrecognized swap"))?;
     let tokens = function.decode_input(&tx.data[4..])?;
 
-    let (amount_in, amount_out, amount_in_max, amount_out_min, path, pair_addr_opt) = match swap_kind {
-        SwapFunction::SwapExactTokensForTokens
-        | SwapFunction::SwapExactTokensForETH
-        | SwapFunction::SwapExactTokensForTokensSupportingFeeOnTransferTokens
-        | SwapFunction::SwapExactTokensForETHSupportingFeeOnTransferTokens => {
-            let amount_in = tokens[0].clone().into_uint().unwrap();
-            let amount_out_min = tokens[1].clone().into_uint().unwrap();
-            let path: Vec<Address> = tokens[2]
-                .clone()
-                .into_array()
-                .unwrap()
-                .into_iter()
-                .map(|t| t.into_address().unwrap())
-                .collect();
-            (Some(amount_in), None, None, Some(amount_out_min), path, None)
-        }
-        SwapFunction::SwapTokensForExactTokens | SwapFunction::SwapTokensForExactETH => {
-            let amount_out = tokens[0].clone().into_uint().unwrap();
-            let amount_in_max = tokens[1].clone().into_uint().unwrap();
-            let path: Vec<Address> = tokens[2]
-                .clone()
-                .into_array()
-                .unwrap()
-                .into_iter()
-                .map(|t| t.into_address().unwrap())
-                .collect();
-            (None, Some(amount_out), Some(amount_in_max), None, path, None)
-        }
-        SwapFunction::SwapExactETHForTokens
-        | SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens => {
-            let amount_out_min = tokens[0].clone().into_uint().unwrap();
-            let path: Vec<Address> = tokens[1]
-                .clone()
-                .into_array()
-                .unwrap()
-                .into_iter()
-                .map(|t| t.into_address().unwrap())
-                .collect();
-            (Some(tx.value), None, None, Some(amount_out_min), path, None)
-        }
-        SwapFunction::ETHForExactTokens => {
-            let amount_out = tokens[0].clone().into_uint().unwrap();
-            let path: Vec<Address> = tokens[1]
-                .clone()
-                .into_array()
-                .unwrap()
-                .into_iter()
-                .map(|t| t.into_address().unwrap())
-                .collect();
-            (None, Some(amount_out), Some(tx.value), None, path, None)
-        }
-        SwapFunction::SwapV2ExactIn => {
-            let token_in = tokens[0].clone().into_address().unwrap();
-            let token_out = tokens[1].clone().into_address().unwrap();
-            let amount_in = tokens[2].clone().into_uint().unwrap();
-            let amount_out_min = tokens[3].clone().into_uint().unwrap();
-            let pair = tokens[4].clone().into_address().unwrap();
-            let path = vec![token_in, token_out];
-            (Some(amount_in), None, None, Some(amount_out_min), path, Some(pair))
-        }
-        _ => return Err(anyhow!("unsupported swap")),
-    };
+    let (amount_in, amount_out, amount_in_max, amount_out_min, path, pair_addr_opt) =
+        match swap_kind {
+            SwapFunction::SwapExactTokensForTokens
+            | SwapFunction::SwapExactTokensForETH
+            | SwapFunction::SwapExactTokensForTokensSupportingFeeOnTransferTokens
+            | SwapFunction::SwapExactTokensForETHSupportingFeeOnTransferTokens => {
+                let amount_in = tokens[0].clone().into_uint().unwrap();
+                let amount_out_min = tokens[1].clone().into_uint().unwrap();
+                let path: Vec<Address> = tokens[2]
+                    .clone()
+                    .into_array()
+                    .unwrap()
+                    .into_iter()
+                    .map(|t| t.into_address().unwrap())
+                    .collect();
+                (
+                    Some(amount_in),
+                    None,
+                    None,
+                    Some(amount_out_min),
+                    path,
+                    None,
+                )
+            }
+            SwapFunction::SwapTokensForExactTokens | SwapFunction::SwapTokensForExactETH => {
+                let amount_out = tokens[0].clone().into_uint().unwrap();
+                let amount_in_max = tokens[1].clone().into_uint().unwrap();
+                let path: Vec<Address> = tokens[2]
+                    .clone()
+                    .into_array()
+                    .unwrap()
+                    .into_iter()
+                    .map(|t| t.into_address().unwrap())
+                    .collect();
+                (
+                    None,
+                    Some(amount_out),
+                    Some(amount_in_max),
+                    None,
+                    path,
+                    None,
+                )
+            }
+            SwapFunction::SwapExactETHForTokens
+            | SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens => {
+                let amount_out_min = tokens[0].clone().into_uint().unwrap();
+                let path: Vec<Address> = tokens[1]
+                    .clone()
+                    .into_array()
+                    .unwrap()
+                    .into_iter()
+                    .map(|t| t.into_address().unwrap())
+                    .collect();
+                (Some(tx.value), None, None, Some(amount_out_min), path, None)
+            }
+            SwapFunction::ETHForExactTokens => {
+                let amount_out = tokens[0].clone().into_uint().unwrap();
+                let path: Vec<Address> = tokens[1]
+                    .clone()
+                    .into_array()
+                    .unwrap()
+                    .into_iter()
+                    .map(|t| t.into_address().unwrap())
+                    .collect();
+                (None, Some(amount_out), Some(tx.value), None, path, None)
+            }
+            SwapFunction::SwapV2ExactIn => {
+                let mut token_in = tokens[0].clone().into_address().unwrap();
+                if let Some(deposit) = deposit_token {
+                    token_in = deposit;
+                }
+                let token_out = tokens[1].clone().into_address().unwrap();
+                let amount_in = tokens[2].clone().into_uint().unwrap();
+                let amount_out_min = tokens[3].clone().into_uint().unwrap();
+                let pair = tokens[4].clone().into_address().unwrap();
+                let path = vec![token_in, token_out];
+                (
+                    Some(amount_in),
+                    None,
+                    None,
+                    Some(amount_out_min),
+                    path,
+                    Some(pair),
+                )
+            }
+            _ => return Err(anyhow!("unsupported swap")),
+        };
 
     let path_tokens: Vec<Token> = path.iter().map(|a| Token::Address(*a)).collect();
 
@@ -137,25 +171,30 @@ pub async fn analyze_uniswap_v2(
     };
 
     let (token0, token1, reserve0, reserve1) = {
-        let abi = AbiParser::default()
-            .parse_function("token0() view returns (address)")?;
+        let abi = AbiParser::default().parse_function("token0() view returns (address)")?;
         let data = abi.encode_input(&[])?;
-        let tx_call = TransactionRequest::new().to(pair_address).data(data.clone());
+        let tx_call = TransactionRequest::new()
+            .to(pair_address)
+            .data(data.clone());
         let call = provider
             .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
             .await
             .map_err(|e| anyhow!(e))?;
         let token0 = abi.decode_output(&call)?[0].clone().into_address().unwrap();
 
-        let abi1 = AbiParser::default()
-            .parse_function("token1() view returns (address)")?;
+        let abi1 = AbiParser::default().parse_function("token1() view returns (address)")?;
         let data1 = abi1.encode_input(&[])?;
-        let tx_call = TransactionRequest::new().to(pair_address).data(data1.clone());
+        let tx_call = TransactionRequest::new()
+            .to(pair_address)
+            .data(data1.clone());
         let call = provider
             .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
             .await
             .map_err(|e| anyhow!(e))?;
-        let token1 = abi1.decode_output(&call)?[0].clone().into_address().unwrap();
+        let token1 = abi1.decode_output(&call)?[0]
+            .clone()
+            .into_address()
+            .unwrap();
 
         let abi_res = AbiParser::default()
             .parse_function("getReserves() returns (uint112,uint112,uint32)")?;
@@ -182,7 +221,10 @@ pub async fn analyze_uniswap_v2(
 
     let (expected_out, expected_in) = if let Some(a_in) = amount_in {
         if pair_addr_opt.is_some() {
-            (Some(constant_product_output(a_in, reserve_in, reserve_out)), None)
+            (
+                Some(constant_product_output(a_in, reserve_in, reserve_out)),
+                None,
+            )
         } else {
             let abi = AbiParser::default()
                 .parse_function("getAmountsOut(uint256,address[]) returns (uint256[])")?;
@@ -269,6 +311,11 @@ pub async fn analyze_uniswap_v2(
     let input_for_profit = amount_in.unwrap_or(actual_in);
     let potential_profit = simulate_sandwich_profit(input_for_profit, reserve_in, reserve_out);
 
+    let router_name = router
+        .name
+        .clone()
+        .unwrap_or_else(|| format!("{:#x}", router.address));
+
     let metrics = Metrics {
         swap_function: swap_kind,
         token_route: path.clone(),
@@ -276,7 +323,7 @@ pub async fn analyze_uniswap_v2(
         min_tokens_to_affect,
         potential_profit,
         router_address: router.address,
-        router_name: router.name.clone(),
+        router_name: Some(router_name),
     };
 
     let potential_victim = if let Some(out_min) = amount_out_min {
