@@ -53,9 +53,10 @@ impl DetectorRegistry {
         outcome: SimulationOutcome,
         router: RouterInfo,
     ) -> Result<AnalysisResult> {
+        let mut last_err = None;
         for d in &self.detectors {
             if d.supports(&router) {
-                return d
+                match d
                     .analyze(
                         rpc_client.clone(),
                         rpc_endpoint.clone(),
@@ -64,10 +65,18 @@ impl DetectorRegistry {
                         outcome.clone(),
                         router.clone(),
                     )
-                    .await;
+                    .await
+                {
+                    Ok(res) => return Ok(res),
+                    Err(e) => last_err = Some(e),
+                }
             }
         }
-        Err(anyhow::anyhow!("unsupported router"))
+        if let Some(err) = last_err {
+            Err(err)
+        } else {
+            Err(anyhow::anyhow!("unsupported router"))
+        }
     }
 }
 
