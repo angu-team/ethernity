@@ -1,0 +1,63 @@
+use crate::detectors::uniswap_v2::analyze_uniswap_v2;
+use crate::dex::{detect_swap_function, RouterInfo};
+use crate::simulation::SimulationOutcome;
+use crate::types::{AnalysisResult, TransactionData};
+use anyhow::{anyhow, Result};
+use async_trait::async_trait;
+use ethernity_core::traits::RpcProvider;
+use ethers::abi::AbiParser;
+use std::sync::Arc;
+
+/// Detector para a função `multicall(bytes[])`.
+pub struct MulticallBytesDetector;
+
+#[async_trait]
+impl crate::detectors::VictimDetector for MulticallBytesDetector {
+    fn supports(&self, _router: &RouterInfo) -> bool {
+        true
+    }
+
+    async fn analyze(
+        &self,
+        rpc_client: Arc<dyn RpcProvider>,
+        rpc_endpoint: String,
+        tx: TransactionData,
+        block: Option<u64>,
+        _outcome: SimulationOutcome,
+        _router: RouterInfo,
+    ) -> Result<AnalysisResult> {
+        analyze_multicall_bytes(rpc_client, rpc_endpoint, tx, block).await
+    }
+}
+
+pub async fn analyze_multicall_bytes(
+    rpc_client: Arc<dyn RpcProvider>,
+    rpc_endpoint: String,
+    tx: TransactionData,
+    block: Option<u64>,
+) -> Result<AnalysisResult> {
+    const MULTICALL_SELECTOR: [u8; 4] = [0xac, 0x96, 0x50, 0xd8];
+    if tx.data.len() < 4 || tx.data[..4] != MULTICALL_SELECTOR {
+        return Err(anyhow!("not a multicall"));
+    }
+
+    let abi = AbiParser::default().parse_function("multicall(bytes[])")?;
+    let tokens = abi.decode_input(&tx.data[4..])?;
+    let calls: Vec<Vec<u8>> = tokens[0]
+        .clone()
+        .into_array()
+        .unwrap()
+        .into_iter()
+        .map(|t| t.into_bytes().unwrap())
+        .collect();
+
+    for call in calls {
+        if detect_swap_function(&call).is_some() {
+            let mut inner = tx.clone();
+            inner.data = call;
+            return analyze_uniswap_v2(rpc_client, rpc_endpoint, inner, block).await;
+        }
+    }
+
+    Err(anyhow!("no swap call found"))
+}
