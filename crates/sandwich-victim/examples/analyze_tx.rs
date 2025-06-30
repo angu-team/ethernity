@@ -52,17 +52,13 @@ async fn main() -> anyhow::Result<()> {
     })
     .await?);
 
-    let Some(result) = analyze_transaction(
+    let result = analyze_transaction(
         rpc_client,
         rpc,
         tx,
         fetched.block_number.map(|b| b.as_u64() - 1),
     )
-    .await?
-    else {
-        println!("Transação ignorada pelos filtros");
-        return Ok(());
-    };
+    .await?;
 
     println!("Potencial vítima: {}", result.potential_victim);
     println!("Economicamente viável: {}", result.economically_viable);
