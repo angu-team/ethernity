@@ -8,6 +8,7 @@ Biblioteca para detectar oportunidades de ataque *sandwich* em transações Ethe
 - lucro potencial de uma estratégia de front‑run e back‑run
 - identificação dinâmica do router envolvido (extraído exclusivamente dos logs da simulação)
 - reconhecimento de todas as variações de funções de swap V2
+- suporte ao PancakeSwap SmartRouterV3 com decodificação da multicall
 
 A arquitetura segue o princípio de responsabilidade única. Cada módulo possui
 uma função clara:

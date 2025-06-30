@@ -13,6 +13,10 @@ pub enum SwapFunction {
     SwapExactTokensForTokensSupportingFeeOnTransferTokens,
     SwapExactETHForTokensSupportingFeeOnTransferTokens,
     SwapExactTokensForETHSupportingFeeOnTransferTokens,
+    ExactInputSingle,
+    ExactInput,
+    ExactOutputSingle,
+    ExactOutput,
 }
 
 impl SwapFunction {
@@ -45,6 +49,18 @@ impl SwapFunction {
             SwapFunction::SwapExactTokensForETHSupportingFeeOnTransferTokens => {
                 "swapExactTokensForETHSupportingFeeOnTransferTokens(uint256,uint256,address[],address,uint256)"
             }
+            SwapFunction::ExactInputSingle => {
+                "exactInputSingle((address,address,uint24,address,uint256,uint256,uint256,uint160))"
+            }
+            SwapFunction::ExactInput => {
+                "exactInput((bytes,address,uint256,uint256,uint256))"
+            }
+            SwapFunction::ExactOutputSingle => {
+                "exactOutputSingle((address,address,uint24,address,uint256,uint256,uint256,uint160))"
+            }
+            SwapFunction::ExactOutput => {
+                "exactOutput((bytes,address,uint256,uint256,uint256))"
+            }
         }
     }
 }
@@ -66,6 +82,10 @@ pub fn detect_swap_function(data: &[u8]) -> Option<(SwapFunction, Function)> {
         SwapFunction::SwapExactTokensForTokensSupportingFeeOnTransferTokens,
         SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens,
         SwapFunction::SwapExactTokensForETHSupportingFeeOnTransferTokens,
+        SwapFunction::ExactInputSingle,
+        SwapFunction::ExactInput,
+        SwapFunction::ExactOutputSingle,
+        SwapFunction::ExactOutput,
     ] {
         let f = parser.parse_function(func.signature()).expect("abi parse");
         if selector == f.short_signature() {
