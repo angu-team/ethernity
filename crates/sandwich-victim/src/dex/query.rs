@@ -7,7 +7,7 @@ use anyhow::anyhow;
 /// Consulta as reservas de um par Uniswap V2-like
 pub async fn get_pair_reserves<P>(provider: &P, pair: Address) -> Result<(U256, U256)>
 where
-    P: RpcProvider + Sync,
+    P: RpcProvider + Sync + ?Sized,
 {
     let abi = AbiParser::default()
         .parse_function("getReserves() returns (uint112,uint112,uint32)")?;
@@ -28,7 +28,7 @@ pub async fn get_pair_address<P>(
     token_b: Address,
 ) -> Result<Address>
 where
-    P: RpcProvider + Sync,
+    P: RpcProvider + Sync + ?Sized,
 {
     let abi = AbiParser::default()
         .parse_function("getPair(address,address) view returns (address)")?;

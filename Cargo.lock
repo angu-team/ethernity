@@ -3356,6 +3356,7 @@ dependencies = [
  "ethernity-core",
  "ethernity-rpc",
  "ethers",
+ "futures",
  "parking_lot",
  "rlp",
  "serde",
