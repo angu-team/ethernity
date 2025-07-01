@@ -18,6 +18,7 @@ pub struct UniswapUniversalRouterDetector;
 
 static UNIVERSAL_ROUTER_ADDRESSES: Lazy<HashSet<Address>> = Lazy::new(|| {
     [
+        "0x1a0a18ac4becddbd6389559687d1a73d8927e416",
         "0x1095692a6237d83c6a72f3f5efedb9a670c49223",
         "0x3a9d48ab9751398bbfa63ad67599bb04e4bdf98b",
         "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
