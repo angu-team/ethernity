@@ -10,8 +10,6 @@ pub mod uniswap_v2;
 use uniswap_v2::UniswapV2Detector;
 pub mod pancakeswap_v3;
 use pancakeswap_v3::PancakeSwapV3Detector;
-pub mod multicall_bytes;
-use multicall_bytes::MulticallBytesDetector;
 pub mod swap_v2_exact_in;
 use swap_v2_exact_in::SwapV2ExactInDetector;
 
@@ -38,7 +36,6 @@ impl Default for DetectorRegistry {
         Self {
             detectors: vec![
                 Box::new(PancakeSwapV3Detector),
-                Box::new(MulticallBytesDetector),
                 Box::new(UniswapV2Detector),
                 Box::new(SwapV2ExactInDetector),
             ],
@@ -82,3 +79,4 @@ impl DetectorRegistry {
         }
     }
 }
+

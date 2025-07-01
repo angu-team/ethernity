@@ -23,9 +23,9 @@ impl crate::detectors::VictimDetector for PancakeSwapV3Detector {
         tx: TransactionData,
         block: Option<u64>,
         _outcome: SimulationOutcome,
-        router: RouterInfo,
+        _router: RouterInfo,
     ) -> Result<AnalysisResult> {
-        analyze_pancakeswap_v3(rpc_client, rpc_endpoint, tx, block, router).await
+        analyze_pancakeswap_v3(rpc_client, rpc_endpoint, tx, block).await
     }
 }
 
@@ -34,7 +34,6 @@ pub async fn analyze_pancakeswap_v3(
     rpc_endpoint: String,
     tx: TransactionData,
     block: Option<u64>,
-    router: RouterInfo,
 ) -> Result<AnalysisResult> {
     const MULTICALL_SELECTOR: [u8; 4] = [0x5a, 0xe4, 0x01, 0xdc];
     if tx.data.len() < 4 || tx.data[..4] != MULTICALL_SELECTOR {
@@ -55,8 +54,7 @@ pub async fn analyze_pancakeswap_v3(
         if detect_swap_function(&call).is_some() {
             let mut inner = tx.clone();
             inner.data = call;
-            inner.to = router.address;
-            return analyze_uniswap_v2(rpc_client, rpc_endpoint, inner, block, router.clone()).await;
+            return analyze_uniswap_v2(rpc_client, rpc_endpoint, inner, block).await;
         }
     }
 

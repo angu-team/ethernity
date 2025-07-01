@@ -29,9 +29,9 @@ impl crate::detectors::VictimDetector for UniswapV2Detector {
         tx: TransactionData,
         block: Option<u64>,
         _outcome: SimulationOutcome,
-        router: RouterInfo,
+        _router: RouterInfo,
     ) -> Result<AnalysisResult> {
-        analyze_uniswap_v2(rpc_client, rpc_endpoint, tx, block, router).await
+        analyze_uniswap_v2(rpc_client, rpc_endpoint, tx, block).await
     }
 }
 
@@ -40,7 +40,6 @@ pub async fn analyze_uniswap_v2(
     rpc_endpoint: String,
     tx: TransactionData,
     block: Option<u64>,
-    router: RouterInfo,
 ) -> Result<AnalysisResult> {
     let sim_config = SimulationConfig {
         rpc_endpoint,
@@ -54,13 +53,8 @@ pub async fn analyze_uniswap_v2(
         .ok_or(anyhow!("No swap event"))?;
     let SimulationOutcome { tx_hash, logs } = outcome;
 
-    // Use provided router information when available
-    let router_address = crate::dex::router_from_logs(&logs).unwrap_or(router.address);
-    let router: RouterInfo = if router_address == router.address {
-        router.clone()
-    } else {
-        crate::dex::identify_router(&*rpc_client, router_address).await?
-    };
+    let router_address = crate::dex::router_from_logs(&logs).ok_or(anyhow!("router not found"))?;
+    let router: RouterInfo = crate::dex::identify_router(&*rpc_client, router_address).await?;
 
     use std::collections::HashSet;
 
