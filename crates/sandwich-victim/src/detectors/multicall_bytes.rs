@@ -6,7 +6,7 @@ use crate::types::{AnalysisResult, TransactionData};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use ethernity_core::traits::RpcProvider;
-use ethers::abi::AbiParser;
+use ethers::abi::{AbiParser, Token};
 use std::sync::Arc;
 
 /// Detector para a função `multicall(bytes[])`.
@@ -63,7 +63,6 @@ pub async fn analyze_multicall_bytes(
     for call in calls {
         if let Some((kind, _)) = detect_swap_function(&call) {
             let mut inner = tx.clone();
-            inner.data = call.clone();
             inner.to = router.address;
 
             let res = match kind {
@@ -71,6 +70,16 @@ pub async fn analyze_multicall_bytes(
                 | SwapFunction::ExactInputSingle
                 | SwapFunction::ExactOutput
                 | SwapFunction::ExactOutputSingle => {
+                    // PancakeSwap V3 expects a `multicall(uint256,bytes[])` payload. Wrap
+                    // the inner call accordingly so it can be analyzed properly.
+                    let mc_abi = AbiParser::default()
+                        .parse_function("multicall(uint256,bytes[])")?;
+                    let encoded = mc_abi.encode_input(&[
+                        Token::Uint(0u64.into()),
+                        Token::Array(vec![Token::Bytes(call.clone())]),
+                    ])?;
+                    inner.data = encoded;
+
                     analyze_pancakeswap_v3(
                         rpc_client.clone(),
                         rpc_endpoint.clone(),
@@ -81,6 +90,7 @@ pub async fn analyze_multicall_bytes(
                     .await
                 }
                 _ => {
+                    inner.data = call.clone();
                     analyze_uniswap_v2(
                         rpc_client.clone(),
                         rpc_endpoint.clone(),
