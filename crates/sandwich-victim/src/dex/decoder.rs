@@ -18,6 +18,8 @@ pub enum SwapFunction {
     ExactOutputSingle,
     ExactOutput,
     SwapV2ExactIn,
+    /// Generic swap executed via the Uniswap Universal Router
+    UniversalRouterSwap,
 }
 
 impl SwapFunction {
@@ -64,6 +66,9 @@ impl SwapFunction {
             }
             SwapFunction::SwapV2ExactIn => {
                 "swapV2ExactIn(address,address,uint256,uint256,address)"
+            }
+            SwapFunction::UniversalRouterSwap => {
+                "universalRouterSwap(bytes,bytes[])"
             }
         }
     }

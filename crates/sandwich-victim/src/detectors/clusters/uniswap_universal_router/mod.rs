@@ -63,22 +63,22 @@ pub async fn analyze_universal_router(
         .and_then(|t| t.clone().into_bytes())
         .ok_or_else(|| anyhow!("invalid commands parameter"))?;
 
-    const SWAP_OPS: [u8; 10] = [
+    const SWAP_OPS: [u8; 5] = [
         0x00, // V3_SWAP_EXACT_IN
         0x01, // V3_SWAP_EXACT_OUT
         0x08, // V2_SWAP_EXACT_IN
         0x09, // V2_SWAP_EXACT_OUT
-        0x02, // PERMIT2_TRANSFER_FROM
-        0x0b, // WRAP_ETH
-        0x0c, // UNWRAP_WETH
-        0x04, // SWEEP
-        0x05, // TRANSFER
-        0x06, // PAY_PORTION
+        0x10, // V4_SWAP
     ];
 
-    if commands.iter().any(|c| SWAP_OPS.contains(c)) {
+    let has_swap = commands
+        .iter()
+        .map(|c| c & 0x3f)
+        .any(|c| SWAP_OPS.contains(&c));
+
+    if has_swap {
         let metrics = Metrics {
-            swap_function: SwapFunction::SwapV2ExactIn,
+            swap_function: SwapFunction::UniversalRouterSwap,
             token_route: Vec::new(),
             slippage: 0.0,
             min_tokens_to_affect: U256::zero(),
@@ -87,7 +87,7 @@ pub async fn analyze_universal_router(
             router_name: Some("Universal Router".into()),
         };
         Ok(AnalysisResult {
-            potential_victim: false,
+            potential_victim: true,
             economically_viable: false,
             simulated_tx: None,
             metrics,
