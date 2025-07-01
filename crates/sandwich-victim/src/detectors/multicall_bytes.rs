@@ -72,12 +72,18 @@ pub async fn analyze_multicall_bytes(
                 | SwapFunction::ExactOutputSingle => {
                     // PancakeSwap V3 expects a `multicall(uint256,bytes[])` payload. Wrap
                     // the inner call accordingly so it can be analyzed properly.
-                    let mc_abi = AbiParser::default()
-                        .parse_function("multicall(uint256,bytes[])")?;
-                    let encoded = mc_abi.encode_input(&[
+                    let mc_abi =
+                        AbiParser::default().parse_function("multicall(uint256,bytes[])")?;
+                    let params = mc_abi.encode_input(&[
                         Token::Uint(0u64.into()),
                         Token::Array(vec![Token::Bytes(call.clone())]),
                     ])?;
+                    // encode_input() only returns the ABI encoded parameters, so
+                    // prepend the function selector expected by the V3 analyzer
+                    const V3_SELECTOR: [u8; 4] = [0x5a, 0xe4, 0x01, 0xdc];
+                    let mut encoded = Vec::with_capacity(4 + params.len());
+                    encoded.extend_from_slice(&V3_SELECTOR);
+                    encoded.extend_from_slice(&params);
                     inner.data = encoded;
 
                     analyze_pancakeswap_v3(
