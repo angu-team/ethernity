@@ -170,8 +170,8 @@ pub async fn analyze_uniswap_v2(
                 }
                 let token_in = Address::from_slice(&path_bytes[..20]);
                 let token_out = Address::from_slice(&path_bytes[path_bytes.len() - 20..]);
-                let amount_in = params[2].clone().into_uint().unwrap();
-                let amount_out_min = params[3].clone().into_uint().unwrap();
+                let amount_in = params[3].clone().into_uint().unwrap();
+                let amount_out_min = params[4].clone().into_uint().unwrap();
                 let path = vec![token_in, token_out];
                 (
                     Some(amount_in),
@@ -206,8 +206,8 @@ pub async fn analyze_uniswap_v2(
                 }
                 let token_in = Address::from_slice(&path_bytes[path_bytes.len() - 20..]);
                 let token_out = Address::from_slice(&path_bytes[..20]);
-                let amount_out = params[2].clone().into_uint().unwrap();
-                let amount_in_max = params[3].clone().into_uint().unwrap();
+                let amount_out = params[3].clone().into_uint().unwrap();
+                let amount_in_max = params[4].clone().into_uint().unwrap();
                 let path = vec![token_in, token_out];
                 (
                     None,
