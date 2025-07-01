@@ -22,9 +22,8 @@ jobs:
           open_router_key: ${{ secrets.OPEN_ROUTER_KEY }} # Must be set in repository secrets
 
           # Optional inputs with defaults
-          model_id: 'anthropic/claude-2' # Default model
+          model_id: 'deepseek/deepseek-chat:free' # Default model
           max_tokens: '2048' # Default max tokens
-          review_label: 'ai-review' # Optional: Only review PRs with this label
 
           # Optional custom prompt
           custom_prompt: |
