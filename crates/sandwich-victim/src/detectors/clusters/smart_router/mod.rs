@@ -1,4 +1,6 @@
-use crate::detectors::uniswap_v2::analyze_uniswap_v2;
+use crate::detectors::clusters::uniswap_v2::analyze_uniswap_v2;
+
+pub mod custom;
 use crate::dex::{detect_swap_function, RouterInfo};
 use crate::simulation::SimulationOutcome;
 use crate::types::{AnalysisResult, TransactionData};

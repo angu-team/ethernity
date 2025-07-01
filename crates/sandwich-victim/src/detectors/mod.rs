@@ -6,14 +6,11 @@ use async_trait::async_trait;
 use ethernity_core::traits::RpcProvider;
 use std::sync::Arc;
 
-pub mod uniswap_v2;
-use uniswap_v2::UniswapV2Detector;
-pub mod pancakeswap_v3;
-use pancakeswap_v3::PancakeSwapV3Detector;
-pub mod multicall_bytes;
-use multicall_bytes::MulticallBytesDetector;
-pub mod swap_v2_exact_in;
-use swap_v2_exact_in::SwapV2ExactInDetector;
+pub mod clusters;
+use clusters::uniswap_v2::{UniswapV2Detector, SwapV2ExactInDetector};
+use clusters::smart_router::MulticallBytesDetector;
+use clusters::smart_router::custom::SmartRouterUniswapV3Detector;
+use clusters::uniswap_v3::UniswapV3Detector;
 
 #[async_trait]
 pub trait VictimDetector: Send + Sync {
@@ -37,7 +34,8 @@ impl Default for DetectorRegistry {
     fn default() -> Self {
         Self {
             detectors: vec![
-                Box::new(PancakeSwapV3Detector),
+                Box::new(UniswapV3Detector),
+                Box::new(SmartRouterUniswapV3Detector),
                 Box::new(MulticallBytesDetector),
                 Box::new(UniswapV2Detector),
                 Box::new(SwapV2ExactInDetector),
