@@ -98,5 +98,16 @@ pub fn detect_swap_function(data: &[u8]) -> Option<(SwapFunction, Function)> {
             return Some((func, f));
         }
     }
+
+    const ALT_FOT_SELECTOR: [u8; 4] = [0x35, 0xd2, 0x94, 0x75];
+    if selector == ALT_FOT_SELECTOR {
+        let mut parser = AbiParser::default();
+        let sig = "swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256,uint256,address[],address,uint256)";
+        let f = parser.parse_function(sig).expect("abi parse");
+        return Some((
+            SwapFunction::SwapExactTokensForTokensSupportingFeeOnTransferTokens,
+            f,
+        ));
+    }
     None
 }
