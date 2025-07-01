@@ -146,6 +146,78 @@ pub async fn analyze_uniswap_v2(
                     .collect();
                 (None, Some(amount_out), Some(tx.value), None, path, None)
             }
+            SwapFunction::ExactInputSingle => {
+                let params = tokens[0].clone().into_tuple().unwrap();
+                let token_in = params[0].clone().into_address().unwrap();
+                let token_out = params[1].clone().into_address().unwrap();
+                let amount_in = params[5].clone().into_uint().unwrap();
+                let amount_out_min = params[6].clone().into_uint().unwrap();
+                let path = vec![token_in, token_out];
+                (
+                    Some(amount_in),
+                    None,
+                    None,
+                    Some(amount_out_min),
+                    path,
+                    None,
+                )
+            }
+            SwapFunction::ExactInput => {
+                let params = tokens[0].clone().into_tuple().unwrap();
+                let path_bytes = params[0].clone().into_bytes().unwrap();
+                if path_bytes.len() < 40 {
+                    return Err(anyhow!("invalid path"));
+                }
+                let token_in = Address::from_slice(&path_bytes[..20]);
+                let token_out = Address::from_slice(&path_bytes[path_bytes.len() - 20..]);
+                let amount_in = params[2].clone().into_uint().unwrap();
+                let amount_out_min = params[3].clone().into_uint().unwrap();
+                let path = vec![token_in, token_out];
+                (
+                    Some(amount_in),
+                    None,
+                    None,
+                    Some(amount_out_min),
+                    path,
+                    None,
+                )
+            }
+            SwapFunction::ExactOutputSingle => {
+                let params = tokens[0].clone().into_tuple().unwrap();
+                let token_in = params[0].clone().into_address().unwrap();
+                let token_out = params[1].clone().into_address().unwrap();
+                let amount_out = params[5].clone().into_uint().unwrap();
+                let amount_in_max = params[6].clone().into_uint().unwrap();
+                let path = vec![token_in, token_out];
+                (
+                    None,
+                    Some(amount_out),
+                    Some(amount_in_max),
+                    None,
+                    path,
+                    None,
+                )
+            }
+            SwapFunction::ExactOutput => {
+                let params = tokens[0].clone().into_tuple().unwrap();
+                let path_bytes = params[0].clone().into_bytes().unwrap();
+                if path_bytes.len() < 40 {
+                    return Err(anyhow!("invalid path"));
+                }
+                let token_in = Address::from_slice(&path_bytes[path_bytes.len() - 20..]);
+                let token_out = Address::from_slice(&path_bytes[..20]);
+                let amount_out = params[2].clone().into_uint().unwrap();
+                let amount_in_max = params[3].clone().into_uint().unwrap();
+                let path = vec![token_in, token_out];
+                (
+                    None,
+                    Some(amount_out),
+                    Some(amount_in_max),
+                    None,
+                    path,
+                    None,
+                )
+            }
             SwapFunction::SwapV2ExactIn => {
                 let mut token_in = tokens[0].clone().into_address().unwrap();
                 if token_in == Address::zero() {
