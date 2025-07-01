@@ -13,6 +13,7 @@ use clusters::uniswap_v4::UniswapV4Detector;
 use clusters::smart_router::MulticallBytesDetector;
 use clusters::smart_router::custom::SmartRouterUniswapV3Detector;
 use clusters::oneinch_generic_router::OneInchGenericRouterDetector;
+use clusters::uniswap_universal_router::UniswapUniversalRouterDetector;
 
 #[async_trait]
 pub trait VictimDetector: Send + Sync {
@@ -40,6 +41,7 @@ impl Default for DetectorRegistry {
                 Box::new(SmartRouterUniswapV3Detector),
                 Box::new(MulticallBytesDetector),
                 Box::new(OneInchGenericRouterDetector),
+                Box::new(UniswapUniversalRouterDetector),
                 Box::new(UniswapV4Detector),
                 Box::new(UniswapV2Detector),
                 Box::new(SwapV2ExactInDetector),
