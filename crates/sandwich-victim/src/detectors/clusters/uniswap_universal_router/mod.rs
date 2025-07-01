@@ -48,10 +48,13 @@ pub async fn analyze_universal_router(
         return Err(anyhow!("not universal router"));
     }
 
-    let abi_sig = if tx.data[..4] == execute_selector[..] {
-        "execute(bytes,bytes[])"
+    let (abi_sig, swap_variant) = if tx.data[..4] == execute_selector[..] {
+        ("execute(bytes,bytes[])", SwapFunction::UniversalRouterSwap)
     } else if tx.data[..4] == execute_deadline_selector[..] {
-        "execute(bytes,bytes[],uint256)"
+        (
+            "execute(bytes,bytes[],uint256)",
+            SwapFunction::UniversalRouterSwapDeadline,
+        )
     } else {
         return Err(anyhow!("not universal router"));
     };
@@ -78,7 +81,7 @@ pub async fn analyze_universal_router(
 
     if has_swap {
         let metrics = Metrics {
-            swap_function: SwapFunction::UniversalRouterSwap,
+            swap_function: swap_variant,
             token_route: Vec::new(),
             slippage: 0.0,
             min_tokens_to_affect: U256::zero(),

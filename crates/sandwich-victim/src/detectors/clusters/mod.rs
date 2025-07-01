@@ -34,7 +34,9 @@ impl From<&SwapFunction> for Cluster {
             | SwapFunction::ExactInput
             | SwapFunction::ExactOutputSingle
             | SwapFunction::ExactOutput => Cluster::UniswapV3,
-            SwapFunction::UniversalRouterSwap => Cluster::UniswapUniversalRouter,
+            SwapFunction::UniversalRouterSwap | SwapFunction::UniversalRouterSwapDeadline => {
+                Cluster::UniswapUniversalRouter
+            }
             _ => Cluster::Unknown,
         }
     }

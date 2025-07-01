@@ -18,8 +18,10 @@ pub enum SwapFunction {
     ExactOutputSingle,
     ExactOutput,
     SwapV2ExactIn,
-    /// Generic swap executed via the Uniswap Universal Router
+    /// `UniversalRouter.execute(bytes,bytes[])`
     UniversalRouterSwap,
+    /// `UniversalRouter.execute(bytes,bytes[],uint256)`
+    UniversalRouterSwapDeadline,
 }
 
 impl SwapFunction {
@@ -67,10 +69,8 @@ impl SwapFunction {
             SwapFunction::SwapV2ExactIn => {
                 "swapV2ExactIn(address,address,uint256,uint256,address)"
             }
-            SwapFunction::UniversalRouterSwap => {
-                // Universal Router execute function
-                "execute(bytes,bytes[])"
-            }
+            SwapFunction::UniversalRouterSwap => "execute(bytes,bytes[])",
+            SwapFunction::UniversalRouterSwapDeadline => "execute(bytes,bytes[],uint256)",
         }
     }
 }
@@ -97,8 +97,14 @@ pub fn detect_swap_function(data: &[u8]) -> Option<(SwapFunction, Function)> {
         (SwapFunction::ExactOutput, "exactOutput((bytes,address,uint256,uint256,uint256))"),
         (SwapFunction::SwapV2ExactIn, "swapV2ExactIn(address,address,uint256,uint256,address)"),
         // Uniswap Universal Router execute functions
-        (SwapFunction::UniversalRouterSwap, "execute(bytes,bytes[])"),
-        (SwapFunction::UniversalRouterSwap, "execute(bytes,bytes[],uint256)"),
+        (
+            SwapFunction::UniversalRouterSwap,
+            "execute(bytes,bytes[])",
+        ),
+        (
+            SwapFunction::UniversalRouterSwapDeadline,
+            "execute(bytes,bytes[],uint256)",
+        ),
     ];
     for (func, sig) in mappings {
         if selector == &ethers::utils::id(sig)[..4] {
