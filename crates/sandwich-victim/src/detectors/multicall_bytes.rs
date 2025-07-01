@@ -60,11 +60,13 @@ pub async fn analyze_multicall_bytes(
         if detect_swap_function(&call).is_some() {
             let mut inner = tx.clone();
             inner.data = call.clone();
+            inner.to = router.address;
             let res = analyze_uniswap_v2(
                 rpc_client.clone(),
                 rpc_endpoint.clone(),
                 inner,
                 block,
+                router.clone(),
             )
             .await;
             match res {
