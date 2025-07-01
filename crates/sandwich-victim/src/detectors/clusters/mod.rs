@@ -1,5 +1,6 @@
 pub mod uniswap_v2;
 pub mod uniswap_v3;
+pub mod uniswap_v4;
 pub mod smart_router;
 
 /// Agrupamento semântico das implementações de detectores.
@@ -7,6 +8,7 @@ pub mod smart_router;
 pub enum Cluster {
     UniswapV2,
     UniswapV3,
+    UniswapV4,
     SmartRouter,
     Unknown,
 }

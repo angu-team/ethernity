@@ -8,9 +8,10 @@ use std::sync::Arc;
 
 pub mod clusters;
 use clusters::uniswap_v2::{UniswapV2Detector, SwapV2ExactInDetector};
+use clusters::uniswap_v3::UniswapV3Detector;
+use clusters::uniswap_v4::UniswapV4Detector;
 use clusters::smart_router::MulticallBytesDetector;
 use clusters::smart_router::custom::SmartRouterUniswapV3Detector;
-use clusters::uniswap_v3::UniswapV3Detector;
 
 #[async_trait]
 pub trait VictimDetector: Send + Sync {
@@ -37,6 +38,7 @@ impl Default for DetectorRegistry {
                 Box::new(UniswapV3Detector),
                 Box::new(SmartRouterUniswapV3Detector),
                 Box::new(MulticallBytesDetector),
+                Box::new(UniswapV4Detector),
                 Box::new(UniswapV2Detector),
                 Box::new(SwapV2ExactInDetector),
             ],
