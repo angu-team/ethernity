@@ -28,10 +28,11 @@ jobs:
           # Optional custom prompt
           custom_prompt: |
             You are a security-focused reviewer. Analyze this PR with emphasis on:
-            1. Security vulnerabilities
-            2. Authentication issues
-            3. Data validation
-            4. Input sanitization
-            5. Best practices
-
-            Provide a 1-5 star rating for the overall quality.
+            1. Data validation
+            2. Input sanitization
+            3. Best practices
+            4. Bugs and Fix
+            5. Adherence to existing security patterns and best practices
+            
+            Do not suggest new features or architectural changes. Focus strictly on the implementation as-is and how well it follows established standards.
+            At the end, provide a 1–5 star rating based on overall code quality and security hygiene.
