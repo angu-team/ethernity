@@ -1,3 +1,6 @@
+pub mod exact_in;
+pub use exact_in::SwapV2ExactInDetector;
+
 use crate::core::metrics::{constant_product_output, simulate_sandwich_profit, U256Ext};
 use crate::dex::{detect_swap_function, get_pair_address, RouterInfo, SwapFunction};
 use crate::filters::{FilterPipeline, SwapLogFilter};
