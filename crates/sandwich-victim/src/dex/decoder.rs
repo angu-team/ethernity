@@ -68,7 +68,8 @@ impl SwapFunction {
                 "swapV2ExactIn(address,address,uint256,uint256,address)"
             }
             SwapFunction::UniversalRouterSwap => {
-                "universalRouterSwap(bytes,bytes[])"
+                // Universal Router execute function
+                "execute(bytes,bytes[])"
             }
         }
     }
@@ -95,6 +96,9 @@ pub fn detect_swap_function(data: &[u8]) -> Option<(SwapFunction, Function)> {
         (SwapFunction::ExactOutputSingle, "exactOutputSingle((address,address,uint24,address,uint256,uint256,uint256,uint160))"),
         (SwapFunction::ExactOutput, "exactOutput((bytes,address,uint256,uint256,uint256))"),
         (SwapFunction::SwapV2ExactIn, "swapV2ExactIn(address,address,uint256,uint256,address)"),
+        // Uniswap Universal Router execute functions
+        (SwapFunction::UniversalRouterSwap, "execute(bytes,bytes[])"),
+        (SwapFunction::UniversalRouterSwap, "execute(bytes,bytes[],uint256)"),
     ];
     for (func, sig) in mappings {
         if selector == &ethers::utils::id(sig)[..4] {
