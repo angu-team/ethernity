@@ -1,4 +1,4 @@
-use crate::detectors::clusters::uniswap_v2::analyze_uniswap_v2;
+use crate::detectors::clusters::uniswap_v2::analyze_uniswap_v2_with_outcome;
 use crate::dex::RouterInfo;
 use crate::simulation::SimulationOutcome;
 use crate::types::{AnalysisResult, TransactionData};
@@ -41,8 +41,8 @@ pub async fn analyze_oneinch_generic_router(
     rpc_endpoint: String,
     tx: TransactionData,
     block: Option<u64>,
-    _outcome: SimulationOutcome,
+    outcome: SimulationOutcome,
     router: RouterInfo,
 ) -> Result<AnalysisResult> {
-    analyze_uniswap_v2(rpc_client, rpc_endpoint, tx, block, router).await
+    analyze_uniswap_v2_with_outcome(rpc_client, rpc_endpoint, tx, block, outcome, router).await
 }
