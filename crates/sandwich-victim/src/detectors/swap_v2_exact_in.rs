@@ -22,14 +22,14 @@ impl crate::detectors::VictimDetector for SwapV2ExactInDetector {
         tx: TransactionData,
         block: Option<u64>,
         _outcome: SimulationOutcome,
-        _router: RouterInfo,
+        router: RouterInfo,
     ) -> Result<AnalysisResult> {
         let (kind, _) = detect_swap_function(&tx.data).ok_or(anyhow!("unrecognized swap"))?;
         if kind != SwapFunction::SwapV2ExactIn {
             return Err(anyhow!("unsupported swap"));
         }
 
-        analyze_uniswap_v2(rpc_client, rpc_endpoint, tx, block).await
+        analyze_uniswap_v2(rpc_client, rpc_endpoint, tx, block, router).await
     }
 }
 
