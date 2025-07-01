@@ -9,4 +9,5 @@ pub mod simulation;
 pub mod dex;
 pub mod core;
 pub mod filters;
+pub mod log_semantics;
 pub mod detectors;

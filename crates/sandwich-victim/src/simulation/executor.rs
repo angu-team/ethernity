@@ -17,6 +17,13 @@ pub struct SimulationOutcome {
     pub logs: Vec<Log>,
 }
 
+impl SimulationOutcome {
+    /// Retorna os logs decodificados de acordo com os mapeamentos semânticos
+    pub fn decoded_logs(&self) -> Vec<crate::log_semantics::MappedLog> {
+        crate::log_semantics::map_logs(&self.logs)
+    }
+}
+
 /// Executa a transação em um fork local utilizando o Anvil
 pub async fn simulate_transaction(
     config: &SimulationConfig,
