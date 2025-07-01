@@ -1,4 +1,4 @@
-use crate::detectors::uniswap_v2::analyze_uniswap_v2;
+use crate::detectors::clusters::uniswap_v2::analyze_uniswap_v2;
 use crate::dex::{detect_swap_function, RouterInfo};
 use crate::simulation::SimulationOutcome;
 use crate::types::{AnalysisResult, TransactionData};
@@ -8,10 +8,10 @@ use ethernity_core::traits::RpcProvider;
 use ethers::abi::AbiParser;
 use std::sync::Arc;
 
-pub struct PancakeSwapV3Detector;
+pub struct SmartRouterUniswapV3Detector;
 
 #[async_trait]
-impl crate::detectors::VictimDetector for PancakeSwapV3Detector {
+impl crate::detectors::VictimDetector for SmartRouterUniswapV3Detector {
     fn supports(&self, _router: &RouterInfo) -> bool {
         true
     }
@@ -25,11 +25,11 @@ impl crate::detectors::VictimDetector for PancakeSwapV3Detector {
         _outcome: SimulationOutcome,
         router: RouterInfo,
     ) -> Result<AnalysisResult> {
-        analyze_pancakeswap_v3(rpc_client, rpc_endpoint, tx, block, router).await
+        analyze_uniswap_v3(rpc_client, rpc_endpoint, tx, block, router).await
     }
 }
 
-pub async fn analyze_pancakeswap_v3(
+pub async fn analyze_uniswap_v3(
     rpc_client: Arc<dyn RpcProvider>,
     rpc_endpoint: String,
     tx: TransactionData,

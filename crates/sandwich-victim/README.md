@@ -8,7 +8,7 @@ Biblioteca para detectar oportunidades de ataque *sandwich* em transações Ethe
 - lucro potencial de uma estratégia de front‑run e back‑run
 - identificação dinâmica do router envolvido (extraído exclusivamente dos logs da simulação)
 - reconhecimento de todas as variações de funções de swap V2
-- suporte ao PancakeSwap SmartRouterV3 com decodificação da multicall
+- suporte ao Uniswap V3 SmartRouter com decodificação de multicalls
 
 A arquitetura segue o princípio de responsabilidade única. Cada módulo possui
 uma função clara:
@@ -17,6 +17,9 @@ uma função clara:
 `dex` provê decodificação e consultas on-chain,
 `client` abstrai chamadas RPC com cache simples e
 `types` define as estruturas de dados. Assim o código fica organizado e fácil de manter.
+
+Os detectores agora são agrupados em **clusters** semânticos em `src/detectors/clusters`, permitindo adicionar variações personalizadas de forma modular.
+Atualmente existem três aglomerados principais: `uniswap_v2`, `uniswap_v3` e `smart_router`.
 
 O código expõe funções assíncronas e pode ser extendido com novos métodos de avaliação.
 
