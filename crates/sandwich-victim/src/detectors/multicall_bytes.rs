@@ -14,8 +14,8 @@ pub struct MulticallBytesDetector;
 
 #[async_trait]
 impl crate::detectors::VictimDetector for MulticallBytesDetector {
-    fn supports(&self, router: &RouterInfo) -> bool {
-        router.factory.is_none()
+    fn supports(&self, _router: &RouterInfo) -> bool {
+        true
     }
 
     async fn analyze(
