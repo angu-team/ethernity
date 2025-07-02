@@ -25,7 +25,8 @@ impl crate::detectors::VictimDetector for SwapV2ExactInDetector {
         router: RouterInfo,
     ) -> Result<AnalysisResult> {
         let (kind, _) = detect_swap_function(&tx.data).ok_or(anyhow!("unrecognized swap"))?;
-        if kind != SwapFunction::SwapV2ExactIn {
+        // Accept any UniswapV2 compatible swap when the router does not expose a factory
+        if crate::detectors::clusters::Cluster::from(&kind) != crate::detectors::clusters::Cluster::UniswapV2 {
             return Err(anyhow!("unsupported swap"));
         }
 

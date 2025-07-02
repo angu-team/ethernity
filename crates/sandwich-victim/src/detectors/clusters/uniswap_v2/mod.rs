@@ -1,7 +1,9 @@
 pub mod exact_in;
 pub use exact_in::SwapV2ExactInDetector;
 
-use crate::core::metrics::{constant_product_output, simulate_sandwich_profit, U256Ext};
+use crate::core::metrics::{
+    constant_product_input, constant_product_output, simulate_sandwich_profit, U256Ext,
+};
 use crate::dex::{detect_swap_function, get_pair_address, RouterInfo, SwapFunction};
 use crate::filters::{FilterPipeline, SwapLogFilter};
 use crate::simulation::{simulate_transaction, SimulationConfig, SimulationOutcome};
@@ -135,7 +137,8 @@ pub async fn analyze_uniswap_v2(
                 )
             }
             SwapFunction::SwapExactETHForTokens
-            | SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens => {
+            | SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens
+            | SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokensWithReferrer => {
                 let amount_out_min = tokens[0].clone().into_uint().unwrap();
                 let path: Vec<Address> = tokens[1]
                     .clone()
@@ -186,13 +189,20 @@ pub async fn analyze_uniswap_v2(
     let provider = Provider::<Http>::try_from(sim_config.rpc_endpoint.clone())?
         .interval(Duration::from_millis(1));
 
+    let swap_topic: H256 =
+        H256::from_slice(keccak256("Swap(address,uint256,uint256,uint256,uint256,address)").as_slice());
     let pair_address = if let Some(addr) = pair_addr_opt {
         addr
     } else if let Some(factory) = router.factory {
         get_pair_address(&*rpc_client, factory, path[0], path[1]).await?
+    } else if let Some(swap_log) = logs.iter().find(|log| log.topics.get(0) == Some(&swap_topic)) {
+        // Fallback to the pair address emitted in the first swap log that matches the Swap event
+        swap_log.address
     } else {
         return Err(anyhow!("router does not expose factory"));
     };
+
+    let call_block = block.map(|b| BlockId::Number(b.into()));
 
     let (token0, token1, reserve0, reserve1) = {
         let abi = AbiParser::default().parse_function("token0() view returns (address)")?;
@@ -201,7 +211,7 @@ pub async fn analyze_uniswap_v2(
             .to(pair_address)
             .data(data.clone());
         let call = provider
-            .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
+            .call(&tx_call.into(), call_block)
             .await
             .map_err(|e| anyhow!(e))?;
         let token0 = abi.decode_output(&call)?[0].clone().into_address().unwrap();
@@ -212,7 +222,7 @@ pub async fn analyze_uniswap_v2(
             .to(pair_address)
             .data(data1.clone());
         let call = provider
-            .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
+            .call(&tx_call.into(), call_block)
             .await
             .map_err(|e| anyhow!(e))?;
         let token1 = abi1.decode_output(&call)?[0]
@@ -225,7 +235,7 @@ pub async fn analyze_uniswap_v2(
         let data_res = abi_res.encode_input(&[])?;
         let tx_call = TransactionRequest::new().to(pair_address).data(data_res);
         let call = provider
-            .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
+            .call(&tx_call.into(), call_block)
             .await
             .map_err(|e| anyhow!(e))?;
         let tokens = abi_res.decode_output(&call)?;
@@ -244,7 +254,7 @@ pub async fn analyze_uniswap_v2(
     };
 
     let (expected_out, expected_in) = if let Some(a_in) = amount_in {
-        if pair_addr_opt.is_some() {
+        if pair_addr_opt.is_some() || router.factory.is_none() {
             (
                 Some(constant_product_output(a_in, reserve_in, reserve_out)),
                 None,
@@ -273,27 +283,34 @@ pub async fn analyze_uniswap_v2(
             (Some(out), None)
         }
     } else if let Some(a_out) = amount_out {
-        let abi = AbiParser::default()
-            .parse_function("getAmountsIn(uint256,address[]) returns (uint256[])")?;
-        let data = abi.encode_input(&[Token::Uint(a_out), Token::Array(path_tokens.clone())])?;
-        let tx_call = TransactionRequest::new()
-            .to(router.address)
-            .data(data.clone());
-        let call = provider
-            .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
-            .await
-            .map_err(|e| anyhow!(e))?;
-        let in_tokens = abi.decode_output(&call)?;
-        let inp = in_tokens[0]
-            .clone()
-            .into_array()
-            .unwrap()
-            .first()
-            .unwrap()
-            .clone()
-            .into_uint()
-            .unwrap();
-        (None, Some(inp))
+        if pair_addr_opt.is_some() || router.factory.is_none() {
+            match constant_product_input(a_out, reserve_in, reserve_out) {
+                Some(inp) => (None, Some(inp)),
+                None => (None, None),
+            }
+        } else {
+            let abi = AbiParser::default()
+                .parse_function("getAmountsIn(uint256,address[]) returns (uint256[])")?;
+            let data = abi.encode_input(&[Token::Uint(a_out), Token::Array(path_tokens.clone())])?;
+            let tx_call = TransactionRequest::new()
+                .to(router.address)
+                .data(data.clone());
+            let call = provider
+                .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
+                .await
+                .map_err(|e| anyhow!(e))?;
+            let in_tokens = abi.decode_output(&call)?;
+            let inp = in_tokens[0]
+                .clone()
+                .into_array()
+                .unwrap()
+                .first()
+                .unwrap()
+                .clone()
+                .into_uint()
+                .unwrap();
+            (None, Some(inp))
+        }
     } else {
         (None, None)
     };
@@ -452,7 +469,8 @@ pub async fn analyze_uniswap_v2_with_outcome(
                 )
             }
             SwapFunction::SwapExactETHForTokens
-            | SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens => {
+            | SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens
+            | SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokensWithReferrer => {
                 let amount_out_min = tokens[0].clone().into_uint().unwrap();
                 let path: Vec<Address> = tokens[1]
                     .clone()
@@ -503,13 +521,19 @@ pub async fn analyze_uniswap_v2_with_outcome(
     let provider = Provider::<Http>::try_from(rpc_endpoint.clone())?
         .interval(Duration::from_millis(1));
 
+    let swap_topic: H256 =
+        H256::from_slice(keccak256("Swap(address,uint256,uint256,uint256,uint256,address)").as_slice());
     let pair_address = if let Some(addr) = pair_addr_opt {
         addr
     } else if let Some(factory) = router.factory {
         get_pair_address(&*rpc_client, factory, path[0], path[1]).await?
+    } else if let Some(swap_log) = logs.iter().find(|log| log.topics.get(0) == Some(&swap_topic)) {
+        swap_log.address
     } else {
         return Err(anyhow!("router does not expose factory"));
     };
+
+    let call_block = block.map(|b| BlockId::Number(b.into()));
 
     let (token0, token1, reserve0, reserve1) = {
         let abi = AbiParser::default().parse_function("token0() view returns (address)")?;
@@ -518,7 +542,7 @@ pub async fn analyze_uniswap_v2_with_outcome(
             .to(pair_address)
             .data(data.clone());
         let call = provider
-            .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
+            .call(&tx_call.into(), call_block)
             .await
             .map_err(|e| anyhow!(e))?;
         let token0 = abi.decode_output(&call)?[0].clone().into_address().unwrap();
@@ -529,7 +553,7 @@ pub async fn analyze_uniswap_v2_with_outcome(
             .to(pair_address)
             .data(data1.clone());
         let call = provider
-            .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
+            .call(&tx_call.into(), call_block)
             .await
             .map_err(|e| anyhow!(e))?;
         let token1 = abi1.decode_output(&call)?[0]
@@ -542,7 +566,7 @@ pub async fn analyze_uniswap_v2_with_outcome(
         let data_res = abi_res.encode_input(&[])?;
         let tx_call = TransactionRequest::new().to(pair_address).data(data_res);
         let call = provider
-            .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
+            .call(&tx_call.into(), call_block)
             .await
             .map_err(|e| anyhow!(e))?;
         let tokens = abi_res.decode_output(&call)?;
@@ -561,7 +585,7 @@ pub async fn analyze_uniswap_v2_with_outcome(
     };
 
     let (expected_out, expected_in) = if let Some(a_in) = amount_in {
-        if pair_addr_opt.is_some() {
+        if pair_addr_opt.is_some() || router.factory.is_none() {
             (
                 Some(constant_product_output(a_in, reserve_in, reserve_out)),
                 None,
@@ -590,27 +614,34 @@ pub async fn analyze_uniswap_v2_with_outcome(
             (Some(out), None)
         }
     } else if let Some(a_out) = amount_out {
-        let abi = AbiParser::default()
-            .parse_function("getAmountsIn(uint256,address[]) returns (uint256[])")?;
-        let data = abi.encode_input(&[Token::Uint(a_out), Token::Array(path_tokens.clone())])?;
-        let tx_call = TransactionRequest::new()
-            .to(router.address)
-            .data(data.clone());
-        let call = provider
-            .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
-            .await
-            .map_err(|e| anyhow!(e))?;
-        let in_tokens = abi.decode_output(&call)?;
-        let inp = in_tokens[0]
-            .clone()
-            .into_array()
-            .unwrap()
-            .first()
-            .unwrap()
-            .clone()
-            .into_uint()
-            .unwrap();
-        (None, Some(inp))
+        if pair_addr_opt.is_some() || router.factory.is_none() {
+            match constant_product_input(a_out, reserve_in, reserve_out) {
+                Some(inp) => (None, Some(inp)),
+                None => (None, None),
+            }
+        } else {
+            let abi = AbiParser::default()
+                .parse_function("getAmountsIn(uint256,address[]) returns (uint256[])")?;
+            let data = abi.encode_input(&[Token::Uint(a_out), Token::Array(path_tokens.clone())])?;
+            let tx_call = TransactionRequest::new()
+                .to(router.address)
+                .data(data.clone());
+            let call = provider
+                .call(&tx_call.into(), block.map(|b| BlockId::Number(b.into())))
+                .await
+                .map_err(|e| anyhow!(e))?;
+            let in_tokens = abi.decode_output(&call)?;
+            let inp = in_tokens[0]
+                .clone()
+                .into_array()
+                .unwrap()
+                .first()
+                .unwrap()
+                .clone()
+                .into_uint()
+                .unwrap();
+            (None, Some(inp))
+        }
     } else {
         (None, None)
     };

@@ -8,3 +8,13 @@ fn detect_swap_v2_exact_in_function() {
     let (func, _) = detect_swap_function(&data).expect("failed to detect");
     assert_eq!(func, SwapFunction::SwapV2ExactIn);
 }
+
+#[test]
+fn detect_custom_swap_exact_eth_for_tokens_fee_on_transfer_with_referrer() {
+    // encoding of swapExactETHForTokensSupportingFeeOnTransferTokens(uint256,address[],address,uint256,address)
+    // with parameters: 1, [0x1111..., 0x2222...], 0x3333..., 68, 0x4444...
+    let data_hex = "088890dc000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000333333333333333333333333333333333333333300000000000000000000000000000000000000000000000000000000000000440000000000000000000000004444444444444444444444444444444444444440000000000000000000000000000000000000000000000000000000000000000200000000000000000000000011111111111111111111111111111111111111110000000000000000000000002222222222222222222222222222222222222222";
+    let data = hex::decode(data_hex).unwrap();
+    let (func, _) = detect_swap_function(&data).expect("failed to detect");
+    assert_eq!(func, SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokensWithReferrer);
+}
