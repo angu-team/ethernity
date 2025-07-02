@@ -9,6 +9,8 @@ RUN apt-get update \
         curl \
         git \
         ca-certificates \
+        openssl \
+        libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install anvil from Foundry
