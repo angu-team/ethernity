@@ -75,7 +75,11 @@ impl SwapFunction {
             SwapFunction::SwapV2ExactIn => {
                 "swapV2ExactIn(address,address,uint256,uint256,address)"
             }
-            SwapFunction::AggregationRouterV6Swap => "aggregationRouterV6Swap()",
+            // Although the Aggregation Router V6 exposes many swap variants,
+            // `aggregationSwap(bytes)` is used as a canonical placeholder when
+            // decoding fails. Use its signature here so `signature()` always
+            // returns a valid function string.
+            SwapFunction::AggregationRouterV6Swap => "aggregationSwap(bytes)",
             SwapFunction::UniversalRouterSwap => "execute(bytes,bytes[])",
             SwapFunction::UniversalRouterSwapDeadline => "execute(bytes,bytes[],uint256)",
         }
