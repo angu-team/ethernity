@@ -1,4 +1,4 @@
-use crate::dex::{RouterInfo, SwapFunction};
+use crate::dex::{detect_swap_function, RouterInfo, SwapFunction};
 use crate::simulation::SimulationOutcome;
 use crate::types::{AnalysisResult, Metrics, TransactionData};
 use anyhow::Result;
@@ -75,32 +75,40 @@ pub async fn analyze_oneinch_aggregation_router_v6(
         return Err(anyhow::anyhow!("not aggregation router v6 swap"));
     }
 
+    // identify called swap function
+    let (swap_function, _) = detect_swap_function(&tx.data).unwrap_or((
+        SwapFunction::AggregationRouterV6Swap,
+        ethers::abi::AbiParser::default()
+            .parse_function("aggregationSwap(bytes)")
+            .unwrap(),
+    ));
+
     use ethers::utils::keccak256;
     use ethers::types::H256;
 
-    let transfer_sig: H256 = H256::from_slice(keccak256("Transfer(address,address,uint256)").as_slice());
-    let mut src_token = Address::zero();
-    let mut dst_token = Address::zero();
+    let transfer_sig: H256 =
+        H256::from_slice(keccak256("Transfer(address,address,uint256)").as_slice());
+    let mut src_token: Option<Address> = None;
+    let mut dst_token: Option<Address> = None;
 
     for log in &outcome.logs {
         if log.topics.get(0) == Some(&transfer_sig) && log.topics.len() == 3 {
             let from = Address::from_slice(&log.topics[1].as_bytes()[12..]);
             let to = Address::from_slice(&log.topics[2].as_bytes()[12..]);
-            if from == tx.from {
-                src_token = log.address;
+            if from == tx.from && src_token.is_none() {
+                src_token = Some(log.address);
             }
             if to == tx.from {
-                dst_token = log.address;
+                dst_token = Some(log.address);
             }
         }
     }
 
     let metrics = Metrics {
-        swap_function: SwapFunction::SwapV2ExactIn,
-        token_route: if src_token != Address::zero() && dst_token != Address::zero() {
-            vec![src_token, dst_token]
-        } else {
-            Vec::new()
+        swap_function,
+        token_route: match (src_token, dst_token) {
+            (Some(a), Some(b)) => vec![a, b],
+            _ => Vec::new(),
         },
         slippage: 0.0,
         min_tokens_to_affect: U256::zero(),

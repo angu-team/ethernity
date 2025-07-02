@@ -39,6 +39,7 @@ impl From<&SwapFunction> for Cluster {
             SwapFunction::UniversalRouterSwap | SwapFunction::UniversalRouterSwapDeadline => {
                 Cluster::UniswapUniversalRouter
             }
+            SwapFunction::AggregationRouterV6Swap => Cluster::Unknown,
         }
     }
 }
