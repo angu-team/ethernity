@@ -127,9 +127,6 @@ pub async fn analyze_universal_router(
         0x10, // V4_SWAP
     ];
 
-    fn command_takes_input(op: u8) -> bool {
-        matches!(op, 0x00 | 0x01 | 0x05 | 0x06 | 0x08 | 0x09 | 0x10)
-    }
 
     let has_swap = commands
         .iter()
@@ -140,8 +137,7 @@ pub async fn analyze_universal_router(
         // attempt to decode the first swap command to extract basic info
         let mut token_route = Vec::new();
         let mut slippage = 0.0f64;
-        let mut input_idx = 0usize;
-        for cmd in commands.iter() {
+        for (idx, cmd) in commands.iter().enumerate() {
             let op = cmd & 0x3f;
             if op == 0x08 || op == 0x09 {
                 // V2 swap commands
@@ -151,11 +147,10 @@ pub async fn analyze_universal_router(
                     "v2SwapExactOutput(address,uint256,uint256,address[],address)"
                 };
                 let f = AbiParser::default().parse_function(func_sig)?;
-                let input_data = match inputs.get(input_idx) {
+                let input_data = match inputs.get(idx) {
                     Some(d) => d,
                     None => break,
                 };
-                input_idx += 1;
                 let tokens = f.decode_input(input_data)?;
                 let path_tokens = tokens
                     .get(3)
@@ -263,8 +258,6 @@ pub async fn analyze_universal_router(
                     }
                 }
                 break;
-            } else if command_takes_input(op) {
-                input_idx += 1;
             }
         }
 
