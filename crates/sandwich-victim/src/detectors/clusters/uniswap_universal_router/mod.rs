@@ -127,36 +127,11 @@ pub async fn analyze_universal_router(
         0x10, // V4_SWAP
     ];
 
+    // Only a subset of commands actually consumes an entry from the `inputs`
+    // array. Counting all commands would misalign the index and decode the
+    // wrong data for swap operations.
     fn consumes_input(op: u8) -> bool {
-        matches!(
-            op,
-            0x00 | 0x01
-                | 0x03
-                | 0x04
-                | 0x05
-                | 0x06
-                | 0x07
-                | 0x08
-                | 0x09
-                | 0x0a
-                | 0x0b
-                | 0x0c
-                | 0x0d
-                | 0x0e
-                | 0x0f
-                | 0x10
-                | 0x11
-                | 0x12
-                | 0x13
-                | 0x14
-                | 0x15
-                | 0x16
-                | 0x17
-                | 0x18
-                | 0x19
-                | 0x1a
-                | 0x1b
-        )
+        matches!(op, 0x00..=0x13)
     }
 
     let has_swap = commands
@@ -197,16 +172,25 @@ pub async fn analyze_universal_router(
                 token_route = path.clone();
 
                 if path.len() == 2 {
-                    let swap_topic: H256 = H256::from_slice(
-                        keccak256("Swap(address,uint256,uint256,uint256,uint256,address)")
-                            .as_slice(),
-                    );
-                    if let Some(log) = outcome
-                        .logs
-                        .iter()
-                        .find(|l| l.topics.get(0) == Some(&swap_topic))
-                    {
+                    let swap_topic: H256 =
+                        H256::from_slice(keccak256("Swap(address,uint256,uint256,uint256,uint256,address)").as_slice());
+                    let mut selected_log = None;
+                    for (idx, log) in outcome.logs.iter().enumerate() {
+                        if log.topics.get(0) != Some(&swap_topic) {
+                            continue;
+                        }
                         let pair = log.address;
+                        let (token0, token1) = match get_pair_tokens(&*rpc_client, pair).await {
+                            Ok(t) => t,
+                            Err(_) => continue,
+                        };
+                        if (token0 == path[0] && token1 == path[1]) || (token1 == path[0] && token0 == path[1]) {
+                            selected_log = Some((pair, idx));
+                            break;
+                        }
+                    }
+
+                    if let Some((pair, _log_idx)) = selected_log {
                         let (token0, token1) = get_pair_tokens(&*rpc_client, pair).await?;
                         let abi_res = AbiParser::default()
                             .parse_function("getReserves() returns (uint112,uint112,uint32)")?;
@@ -241,8 +225,7 @@ pub async fn analyze_universal_router(
                                 .get(1)
                                 .and_then(|t| t.clone().into_uint())
                                 .ok_or_else(|| anyhow!("missing amountIn"))?;
-                            let expected =
-                                constant_product_output(amount_in, reserve_in, reserve_out);
+                            let expected = constant_product_output(amount_in, reserve_in, reserve_out);
                             let recipient = tokens
                                 .get(0)
                                 .and_then(|t| t.clone().into_address())
@@ -261,8 +244,7 @@ pub async fn analyze_universal_router(
                                 }
                             }
                             if expected > actual_out && !expected.is_zero() {
-                                slippage = (expected - actual_out).to_f64_lossy()
-                                    / expected.to_f64_lossy();
+                                slippage = (expected - actual_out).to_f64_lossy() / expected.to_f64_lossy();
                             }
                         } else {
                             let amount_out = tokens
@@ -291,8 +273,7 @@ pub async fn analyze_universal_router(
                                     }
                                 }
                                 if actual_in > expected_in && !expected_in.is_zero() {
-                                    slippage = (actual_in - expected_in).to_f64_lossy()
-                                        / expected_in.to_f64_lossy();
+                                    slippage = (actual_in - expected_in).to_f64_lossy() / expected_in.to_f64_lossy();
                                 }
                             }
                         }
