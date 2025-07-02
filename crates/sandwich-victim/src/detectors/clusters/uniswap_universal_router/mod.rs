@@ -40,6 +40,8 @@ static UNIVERSAL_ROUTER_ADDRESSES: Lazy<HashSet<Address>> = Lazy::new(|| {
         "0xec7be89e9d109e7e3fec59c222cf297125fefda2",
         "0xec8b0f7ffe3ae75d7ffab09429e3675bb63503e4",
         "0xef1c6e67703c7bd7107eed8303fbe6ec2554bf6b",
+        // BSC mainnet Universal Router
+        "0xd9c500dff816a1da21a48a732d3498bf09dc9aeb",
     ]
     .into_iter()
     .map(|s| Address::from_str(s).expect("valid address"))
