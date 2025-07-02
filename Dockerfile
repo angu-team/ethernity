@@ -1,4 +1,3 @@
-# Use a newer Rust image to ensure compatibility with lock file version 4
 FROM rust:1.87-slim
 
 WORKDIR /app
