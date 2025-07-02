@@ -1,18 +1,18 @@
-use crate::dex::{RouterInfo, SwapFunction};
+use crate::core::metrics::{constant_product_input, constant_product_output, U256Ext};
 use crate::dex::query::get_pair_tokens;
+use crate::dex::{RouterInfo, SwapFunction};
 use crate::filters::{FilterPipeline, SwapLogFilter};
 use crate::simulation::SimulationOutcome;
-use crate::core::metrics::{constant_product_input, constant_product_output, U256Ext};
 use crate::types::{AnalysisResult, Metrics, TransactionData};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use ethereum_types::H256;
 use ethereum_types::{Address, U256};
 use ethernity_core::traits::RpcProvider;
 use ethers::abi::AbiParser;
 use ethers::prelude::{Http, Middleware, Provider, TransactionRequest};
 use ethers::types::BlockId;
 use ethers::utils::{id, keccak256};
-use ethereum_types::H256;
 use once_cell::sync::Lazy;
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -54,7 +54,6 @@ static UNIVERSAL_ROUTER_ADDRESSES: Lazy<HashSet<Address>> = Lazy::new(|| {
     .collect()
 });
 
-
 #[async_trait]
 impl crate::detectors::VictimDetector for UniswapUniversalRouterDetector {
     fn supports(&self, router: &RouterInfo) -> bool {
@@ -81,8 +80,8 @@ pub async fn analyze_universal_router(
     outcome: SimulationOutcome,
     block: Option<u64>,
 ) -> Result<AnalysisResult> {
-    let provider = Provider::<Http>::try_from(rpc_endpoint.clone())?
-        .interval(Duration::from_millis(1));
+    let provider =
+        Provider::<Http>::try_from(rpc_endpoint.clone())?.interval(Duration::from_millis(1));
     let call_block = block.map(|b| BlockId::Number(b.into()));
     let outcome = FilterPipeline::new()
         .push(SwapLogFilter)
@@ -117,8 +116,8 @@ pub async fn analyze_universal_router(
         .and_then(|t| t.clone().into_array())
         .ok_or_else(|| anyhow!("missing inputs"))?
         .into_iter()
-        .map(|v| v.into_bytes().unwrap_or_default())
-        .collect();
+        .map(|v| v.into_bytes().ok_or_else(|| anyhow!("invalid input type")))
+        .collect::<Result<Vec<_>>>()?;
 
     const SWAP_OPS: [u8; 5] = [
         0x00, // V3_SWAP_EXACT_IN
@@ -128,6 +127,37 @@ pub async fn analyze_universal_router(
         0x10, // V4_SWAP
     ];
 
+    fn consumes_input(op: u8) -> bool {
+        matches!(
+            op,
+            0x00 | 0x01
+                | 0x03
+                | 0x04
+                | 0x05
+                | 0x06
+                | 0x07
+                | 0x08
+                | 0x09
+                | 0x0a
+                | 0x0b
+                | 0x0c
+                | 0x0d
+                | 0x0e
+                | 0x0f
+                | 0x10
+                | 0x11
+                | 0x12
+                | 0x13
+                | 0x14
+                | 0x15
+                | 0x16
+                | 0x17
+                | 0x18
+                | 0x19
+                | 0x1a
+                | 0x1b
+        )
+    }
 
     let has_swap = commands
         .iter()
@@ -138,7 +168,8 @@ pub async fn analyze_universal_router(
         // attempt to decode the first swap command to extract basic info
         let mut token_route = Vec::new();
         let mut slippage = 0.0f64;
-        for (idx, cmd) in commands.iter().enumerate() {
+        let mut input_idx = 0usize;
+        for cmd in commands.iter() {
             let op = cmd & 0x3f;
             if op == 0x08 || op == 0x09 {
                 // V2 swap commands
@@ -148,10 +179,9 @@ pub async fn analyze_universal_router(
                     "v2SwapExactOutput(address,uint256,uint256,address[],address)"
                 };
                 let f = AbiParser::default().parse_function(func_sig)?;
-                let input_data = match inputs.get(idx) {
-                    Some(d) => d,
-                    None => break,
-                };
+                let input_data = inputs
+                    .get(input_idx)
+                    .ok_or_else(|| anyhow!("missing input for swap command"))?;
                 let tokens = f.decode_input(input_data)?;
                 let path_tokens = tokens
                     .get(3)
@@ -168,17 +198,34 @@ pub async fn analyze_universal_router(
 
                 if path.len() == 2 {
                     let swap_topic: H256 = H256::from_slice(
-                        keccak256("Swap(address,uint256,uint256,uint256,uint256,address)").as_slice(),
+                        keccak256("Swap(address,uint256,uint256,uint256,uint256,address)")
+                            .as_slice(),
                     );
-                    if let Some(log) = outcome.logs.iter().find(|l| l.topics.get(0) == Some(&swap_topic)) {
+                    if let Some(log) = outcome
+                        .logs
+                        .iter()
+                        .find(|l| l.topics.get(0) == Some(&swap_topic))
+                    {
                         let pair = log.address;
                         let (token0, token1) = get_pair_tokens(&*rpc_client, pair).await?;
-                        let abi_res = AbiParser::default().parse_function("getReserves() returns (uint112,uint112,uint32)")?;
-                        let tx_call = TransactionRequest::new().to(pair).data(abi_res.encode_input(&[])?);
-                        let res_out = provider.call(&tx_call.into(), call_block).await.map_err(|e| anyhow!(e))?;
+                        let abi_res = AbiParser::default()
+                            .parse_function("getReserves() returns (uint112,uint112,uint32)")?;
+                        let tx_call = TransactionRequest::new()
+                            .to(pair)
+                            .data(abi_res.encode_input(&[])?);
+                        let res_out = provider
+                            .call(&tx_call.into(), call_block)
+                            .await
+                            .map_err(|e| anyhow!(e))?;
                         let r = abi_res.decode_output(&res_out)?;
-                        let reserve0 = r.get(0).and_then(|v| v.clone().into_uint()).ok_or_else(|| anyhow!("reserve0 decode"))?;
-                        let reserve1 = r.get(1).and_then(|v| v.clone().into_uint()).ok_or_else(|| anyhow!("reserve1 decode"))?;
+                        let reserve0 = r
+                            .get(0)
+                            .and_then(|v| v.clone().into_uint())
+                            .ok_or_else(|| anyhow!("reserve0 decode"))?;
+                        let reserve1 = r
+                            .get(1)
+                            .and_then(|v| v.clone().into_uint())
+                            .ok_or_else(|| anyhow!("reserve1 decode"))?;
                         let (reserve_in, reserve_out) = if token0 == path[0] && token1 == path[1] {
                             (reserve0, reserve1)
                         } else if token1 == path[0] && token0 == path[1] {
@@ -186,58 +233,76 @@ pub async fn analyze_universal_router(
                         } else {
                             continue;
                         };
-                        let transfer_sig: H256 = H256::from_slice(keccak256("Transfer(address,address,uint256)").as_slice());
+                        let transfer_sig: H256 = H256::from_slice(
+                            keccak256("Transfer(address,address,uint256)").as_slice(),
+                        );
                         if op == 0x08 {
                             let amount_in = tokens
                                 .get(1)
                                 .and_then(|t| t.clone().into_uint())
-                                .unwrap_or_default();
-                            let expected = constant_product_output(amount_in, reserve_in, reserve_out);
+                                .ok_or_else(|| anyhow!("missing amountIn"))?;
+                            let expected =
+                                constant_product_output(amount_in, reserve_in, reserve_out);
                             let recipient = tokens
                                 .get(0)
                                 .and_then(|t| t.clone().into_address())
                                 .unwrap_or(tx.from);
                             let mut actual_out = U256::zero();
                             for log in &outcome.logs {
-                                if log.topics.get(0) == Some(&transfer_sig) && log.topics.len() >= 3 {
-                                    let to_addr = Address::from_slice(&log.topics[2].as_bytes()[12..]);
-                                    let from_addr = Address::from_slice(&log.topics[1].as_bytes()[12..]);
+                                if log.topics.get(0) == Some(&transfer_sig) && log.topics.len() >= 3
+                                {
+                                    let to_addr =
+                                        Address::from_slice(&log.topics[2].as_bytes()[12..]);
+                                    let from_addr =
+                                        Address::from_slice(&log.topics[1].as_bytes()[12..]);
                                     if to_addr == recipient && from_addr == pair {
                                         actual_out = U256::from_big_endian(&log.data.0);
                                     }
                                 }
                             }
                             if expected > actual_out && !expected.is_zero() {
-                                slippage = (expected - actual_out).to_f64_lossy() / expected.to_f64_lossy();
+                                slippage = (expected - actual_out).to_f64_lossy()
+                                    / expected.to_f64_lossy();
                             }
                         } else {
                             let amount_out = tokens
                                 .get(1)
                                 .and_then(|t| t.clone().into_uint())
-                                .unwrap_or_default();
-                            if let Some(expected_in) = constant_product_input(amount_out, reserve_in, reserve_out) {
+                                .ok_or_else(|| anyhow!("missing amountOut"))?;
+                            if let Some(expected_in) =
+                                constant_product_input(amount_out, reserve_in, reserve_out)
+                            {
                                 let payer = tokens
                                     .get(4)
                                     .and_then(|t| t.clone().into_address())
                                     .unwrap_or(tx.from);
                                 let mut actual_in = U256::zero();
                                 for log in &outcome.logs {
-                                    if log.topics.get(0) == Some(&transfer_sig) && log.topics.len() >= 3 {
-                                        let from_addr = Address::from_slice(&log.topics[1].as_bytes()[12..]);
-                                        let to_addr = Address::from_slice(&log.topics[2].as_bytes()[12..]);
+                                    if log.topics.get(0) == Some(&transfer_sig)
+                                        && log.topics.len() >= 3
+                                    {
+                                        let from_addr =
+                                            Address::from_slice(&log.topics[1].as_bytes()[12..]);
+                                        let to_addr =
+                                            Address::from_slice(&log.topics[2].as_bytes()[12..]);
                                         if from_addr == payer && to_addr == pair {
                                             actual_in = U256::from_big_endian(&log.data.0);
                                         }
                                     }
                                 }
                                 if actual_in > expected_in && !expected_in.is_zero() {
-                                    slippage = (actual_in - expected_in).to_f64_lossy() / expected_in.to_f64_lossy();
+                                    slippage = (actual_in - expected_in).to_f64_lossy()
+                                        / expected_in.to_f64_lossy();
                                 }
                             }
                         }
                     }
                 }
                 break;
+            }
+
+            if consumes_input(op) {
+                input_idx += 1;
             }
         }
 
@@ -260,4 +325,3 @@ pub async fn analyze_universal_router(
         Err(anyhow!("no universal router swap commands"))
     }
 }
-
