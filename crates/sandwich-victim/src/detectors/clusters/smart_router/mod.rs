@@ -1,4 +1,6 @@
 use crate::detectors::clusters::uniswap_v2::analyze_uniswap_v2;
+use crate::detectors::clusters::smart_router::custom::analyze_uniswap_v3;
+use crate::detectors::clusters::Cluster;
 
 pub mod custom;
 use crate::dex::{detect_swap_function, RouterInfo};
@@ -59,19 +61,31 @@ pub async fn analyze_multicall_bytes(
 
     let mut last_err = None;
     for call in calls {
-        if detect_swap_function(&call).is_some() {
+        if let Some((kind, _)) = detect_swap_function(&call) {
             let mut inner = tx.clone();
             inner.data = call.clone();
             inner.to = router.address;
-            let res = analyze_uniswap_v2(
-                rpc_client.clone(),
-                rpc_endpoint.clone(),
-                inner,
-                block,
-                router.clone(),
-            )
-            .await;
-            match res {
+            let analysis = match Cluster::from(&kind) {
+                Cluster::UniswapV3 =>
+                    analyze_uniswap_v3(
+                        rpc_client.clone(),
+                        rpc_endpoint.clone(),
+                        inner,
+                        block,
+                        router.clone(),
+                    )
+                    .await,
+                _ =>
+                    analyze_uniswap_v2(
+                        rpc_client.clone(),
+                        rpc_endpoint.clone(),
+                        inner,
+                        block,
+                        router.clone(),
+                    )
+                    .await,
+            };
+            match analysis {
                 Ok(v) => return Ok(v),
                 Err(e) => last_err = Some(e),
             }
