@@ -44,19 +44,17 @@ where
 /// Consulta a cotação de entrada exata via Uniswap V3 Quoter
 pub async fn quote_exact_input<P>(
     provider: &P,
+    quoter: Address,
     path: Vec<u8>,
     amount_in: U256,
 ) -> Result<U256>
 where
     P: RpcProvider + Sync + ?Sized,
 {
-    use std::str::FromStr;
-    const QUOTER: &str = "0xb27308f9f90d607463bb33ea1bebb41c27ce5ab6";
-    let addr = Address::from_str(QUOTER).expect("quoter address");
     let abi = AbiParser::default()
         .parse_function("quoteExactInput(bytes,uint256) returns (uint256)")?;
     let data = abi.encode_input(&[Token::Bytes(path), Token::Uint(amount_in)])?;
-    let out = provider.call(addr, data.into()).await.map_err(|e| anyhow!(e))?;
+    let out = provider.call(quoter, data.into()).await.map_err(|e| anyhow!(e))?;
     let tokens = abi.decode_output(&out)?;
     Ok(tokens[0].clone().into_uint().unwrap())
 }
@@ -64,19 +62,17 @@ where
 /// Consulta a cotação de saída exata via Uniswap V3 Quoter
 pub async fn quote_exact_output<P>(
     provider: &P,
+    quoter: Address,
     path: Vec<u8>,
     amount_out: U256,
 ) -> Result<U256>
 where
     P: RpcProvider + Sync + ?Sized,
 {
-    use std::str::FromStr;
-    const QUOTER: &str = "0xb27308f9f90d607463bb33ea1bebb41c27ce5ab6";
-    let addr = Address::from_str(QUOTER).expect("quoter address");
     let abi = AbiParser::default()
         .parse_function("quoteExactOutput(bytes,uint256) returns (uint256)")?;
     let data = abi.encode_input(&[Token::Bytes(path), Token::Uint(amount_out)])?;
-    let out = provider.call(addr, data.into()).await.map_err(|e| anyhow!(e))?;
+    let out = provider.call(quoter, data.into()).await.map_err(|e| anyhow!(e))?;
     let tokens = abi.decode_output(&out)?;
     Ok(tokens[0].clone().into_uint().unwrap())
 }
