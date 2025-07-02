@@ -198,16 +198,9 @@ pub async fn analyze_uniswap_v2(
         return Err(anyhow!("router does not expose factory"));
     };
 
-    let call_block = if router.factory.is_some() {
-        block.map(|b| BlockId::Number(b.into()))
-    } else {
-        None
-    };
+    let call_block = block.map(|b| BlockId::Number(b.into()));
 
-    let (token0, token1, reserve0, reserve1) = if router.factory.is_none() {
-        // Fallback when factory is unavailable: skip reserve lookups
-        (path[0], path[1], U256::zero(), U256::zero())
-    } else {
+    let (token0, token1, reserve0, reserve1) = {
         let abi = AbiParser::default().parse_function("token0() view returns (address)")?;
         let data = abi.encode_input(&[])?;
         let tx_call = TransactionRequest::new()
@@ -534,16 +527,9 @@ pub async fn analyze_uniswap_v2_with_outcome(
         return Err(anyhow!("router does not expose factory"));
     };
 
-    let call_block = if router.factory.is_some() {
-        block.map(|b| BlockId::Number(b.into()))
-    } else {
-        None
-    };
+    let call_block = block.map(|b| BlockId::Number(b.into()));
 
-    let (token0, token1, reserve0, reserve1) = if router.factory.is_none() {
-        // Fallback when factory is unavailable: skip reserve lookups
-        (path[0], path[1], U256::zero(), U256::zero())
-    } else {
+    let (token0, token1, reserve0, reserve1) = {
         let abi = AbiParser::default().parse_function("token0() view returns (address)")?;
         let data = abi.encode_input(&[])?;
         let tx_call = TransactionRequest::new()
