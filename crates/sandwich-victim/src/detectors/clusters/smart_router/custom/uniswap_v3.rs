@@ -11,11 +11,19 @@ use ethernity_core::traits::RpcProvider;
 use ethers::abi::AbiParser;
 use ethers::types::{Address, H256, U256};
 use ethers::utils::keccak256;
-use std::sync::Arc;
+use std::env;
 use std::str::FromStr;
+use std::sync::Arc;
 
 /// Default Uniswap V3 Quoter address on Ethereum mainnet.
 const DEFAULT_QUOTER: &str = "0xb27308f9f90d607463bb33ea1bebb41c27ce5ab6";
+
+fn quoter_address() -> Address {
+    env::var("UNISWAP_V3_QUOTER")
+        .ok()
+        .and_then(|v| Address::from_str(&v).ok())
+        .unwrap_or_else(|| Address::from_str(DEFAULT_QUOTER).expect("default quoter"))
+}
 
 pub struct SmartRouterUniswapV3Detector;
 
@@ -143,7 +151,7 @@ pub async fn analyze_uniswap_v3(
                 crate::dex::identify_router(&*rpc_client, router_address).await?
             };
 
-            let quoter = Address::from_str(DEFAULT_QUOTER).expect("quoter address");
+            let quoter = quoter_address();
             let (expected_out, expected_in) = if let Some(a_in) = amount_in {
                 (
                     Some(quote_exact_input(&*rpc_client, quoter, path_bytes.clone(), a_in).await?),
@@ -152,7 +160,9 @@ pub async fn analyze_uniswap_v3(
             } else if let Some(a_out) = amount_out {
                 (
                     None,
-                    Some(quote_exact_output(&*rpc_client, quoter, path_bytes.clone(), a_out).await?),
+                    Some(
+                        quote_exact_output(&*rpc_client, quoter, path_bytes.clone(), a_out).await?,
+                    ),
                 )
             } else {
                 (None, None)
