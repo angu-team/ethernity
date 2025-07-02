@@ -98,7 +98,7 @@ pub async fn analyze_oneinch_aggregation_router_v6(
             if from == tx.from && src_token.is_none() {
                 src_token = Some(log.address);
             }
-            if to == tx.from {
+            if to == tx.from && dst_token.is_none() {
                 dst_token = Some(log.address);
             }
         }
