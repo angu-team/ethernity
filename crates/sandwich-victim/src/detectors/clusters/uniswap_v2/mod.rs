@@ -189,12 +189,14 @@ pub async fn analyze_uniswap_v2(
     let provider = Provider::<Http>::try_from(sim_config.rpc_endpoint.clone())?
         .interval(Duration::from_millis(1));
 
+    let swap_topic: H256 =
+        H256::from_slice(keccak256("Swap(address,uint256,uint256,uint256,uint256,address)").as_slice());
     let pair_address = if let Some(addr) = pair_addr_opt {
         addr
     } else if let Some(factory) = router.factory {
         get_pair_address(&*rpc_client, factory, path[0], path[1]).await?
-    } else if let Some(swap_log) = logs.get(0) {
-        // Fallback to the pair address emitted in the first swap log
+    } else if let Some(swap_log) = logs.iter().find(|log| log.topics.get(0) == Some(&swap_topic)) {
+        // Fallback to the pair address emitted in the first swap log that matches the Swap event
         swap_log.address
     } else {
         return Err(anyhow!("router does not expose factory"));
@@ -519,11 +521,13 @@ pub async fn analyze_uniswap_v2_with_outcome(
     let provider = Provider::<Http>::try_from(rpc_endpoint.clone())?
         .interval(Duration::from_millis(1));
 
+    let swap_topic: H256 =
+        H256::from_slice(keccak256("Swap(address,uint256,uint256,uint256,uint256,address)").as_slice());
     let pair_address = if let Some(addr) = pair_addr_opt {
         addr
     } else if let Some(factory) = router.factory {
         get_pair_address(&*rpc_client, factory, path[0], path[1]).await?
-    } else if let Some(swap_log) = logs.get(0) {
+    } else if let Some(swap_log) = logs.iter().find(|log| log.topics.get(0) == Some(&swap_topic)) {
         swap_log.address
     } else {
         return Err(anyhow!("router does not expose factory"));
