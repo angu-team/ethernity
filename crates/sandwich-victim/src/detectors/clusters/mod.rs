@@ -3,6 +3,7 @@ pub mod uniswap_v3;
 pub mod uniswap_v4;
 pub mod smart_router;
 pub mod oneinch_generic_router;
+pub mod oneinch_aggregation_router_v6;
 pub mod uniswap_universal_router;
 
 /// Agrupamento semântico das implementações de detectores.

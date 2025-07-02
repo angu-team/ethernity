@@ -2,6 +2,7 @@ use crate::detectors::clusters::uniswap_v2::analyze_uniswap_v2;
 
 pub mod custom;
 use crate::dex::{detect_swap_function, RouterInfo};
+use super::oneinch_aggregation_router_v6::AGGREGATION_ROUTER_V6_ADDRESSES;
 use crate::simulation::SimulationOutcome;
 use crate::types::{AnalysisResult, TransactionData};
 use anyhow::{anyhow, Result};
@@ -16,7 +17,7 @@ pub struct MulticallBytesDetector;
 #[async_trait]
 impl crate::detectors::VictimDetector for MulticallBytesDetector {
     fn supports(&self, router: &RouterInfo) -> bool {
-        router.factory.is_none()
+        router.factory.is_none() && !AGGREGATION_ROUTER_V6_ADDRESSES.contains(&router.address)
     }
 
     async fn analyze(
