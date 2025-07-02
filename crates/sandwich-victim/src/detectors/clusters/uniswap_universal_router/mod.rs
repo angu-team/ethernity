@@ -1,13 +1,15 @@
 use crate::dex::{RouterInfo, SwapFunction};
 use crate::filters::{FilterPipeline, SwapLogFilter};
 use crate::simulation::SimulationOutcome;
+use crate::core::metrics::{constant_product_output, U256Ext};
 use crate::types::{AnalysisResult, Metrics, TransactionData};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use ethereum_types::{Address, U256};
 use ethernity_core::traits::RpcProvider;
 use ethers::abi::AbiParser;
-use ethers::utils::id;
+use ethers::utils::{id, keccak256};
+use ethereum_types::H256;
 use once_cell::sync::Lazy;
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -57,20 +59,22 @@ impl crate::detectors::VictimDetector for UniswapUniversalRouterDetector {
 
     async fn analyze(
         &self,
-        _rpc_client: Arc<dyn RpcProvider>,
+        rpc_client: Arc<dyn RpcProvider>,
         _rpc_endpoint: String,
         tx: TransactionData,
-        _block: Option<u64>,
-        _outcome: SimulationOutcome,
+        block: Option<u64>,
+        outcome: SimulationOutcome,
         _router: RouterInfo,
     ) -> Result<AnalysisResult> {
-        analyze_universal_router(tx, _outcome).await
+        analyze_universal_router(rpc_client, tx, outcome, block).await
     }
 }
 
 pub async fn analyze_universal_router(
+    rpc_client: Arc<dyn RpcProvider>,
     tx: TransactionData,
     _outcome: SimulationOutcome,
+    block: Option<u64>,
 ) -> Result<AnalysisResult> {
     let outcome = FilterPipeline::new()
         .push(SwapLogFilter)
@@ -100,6 +104,13 @@ pub async fn analyze_universal_router(
         .get(0)
         .and_then(|t| t.clone().into_bytes())
         .ok_or_else(|| anyhow!("invalid commands parameter"))?;
+    let inputs: Vec<Vec<u8>> = tokens
+        .get(1)
+        .and_then(|t| t.clone().into_array())
+        .ok_or_else(|| anyhow!("missing inputs"))?
+        .into_iter()
+        .map(|v| v.into_bytes().unwrap_or_default())
+        .collect();
 
     const SWAP_OPS: [u8; 5] = [
         0x00, // V3_SWAP_EXACT_IN
@@ -115,14 +126,77 @@ pub async fn analyze_universal_router(
         .any(|c| SWAP_OPS.contains(&c));
 
     if has_swap {
+        // attempt to decode the first swap command to extract basic info
+        let mut token_route = Vec::new();
+        let mut slippage = 0.0f64;
+        for (idx, cmd) in commands.iter().enumerate() {
+            let op = cmd & 0x3f;
+            if op == 0x08 || op == 0x09 {
+                // V2 swap commands
+                let func_sig = if op == 0x08 {
+                    "v2SwapExactInput(address,uint256,uint256,address[],address)"
+                } else {
+                    "v2SwapExactOutput(address,uint256,uint256,address[],address)"
+                };
+                let f = AbiParser::default().parse_function(func_sig)?;
+                let tokens = f.decode_input(&inputs[idx])?;
+                let path: Vec<Address> = tokens[3]
+                    .clone()
+                    .into_array()
+                    .unwrap()
+                    .into_iter()
+                    .map(|t| t.into_address().unwrap())
+                    .collect();
+                token_route = path.clone();
+
+                if path.len() == 2 {
+                    let swap_topic: H256 = H256::from_slice(
+                        keccak256("Swap(address,uint256,uint256,uint256,uint256,address)").as_slice(),
+                    );
+                    if let Some(log) = outcome.logs.iter().find(|l| l.topics.get(0) == Some(&swap_topic)) {
+                        let pair = log.address;
+                        let abi_token = AbiParser::default().parse_function("token0() view returns (address)")?;
+                        let data = abi_token.encode_input(&[])?;
+                        let out = rpc_client.call(pair, data.clone()).await?;
+                        let token0 = abi_token.decode_output(&out)?[0].clone().into_address().unwrap();
+                        let abi_token1 = AbiParser::default().parse_function("token1() view returns (address)")?;
+                        let out1 = rpc_client.call(pair, abi_token1.encode_input(&[])?).await?;
+                        let token1 = abi_token1.decode_output(&out1)?[0].clone().into_address().unwrap();
+                        let abi_res = AbiParser::default().parse_function("getReserves() returns (uint112,uint112,uint32)")?;
+                        let res_out = rpc_client.call(pair, abi_res.encode_input(&[])?).await?;
+                        let r = abi_res.decode_output(&res_out)?;
+                        let reserve0 = r[0].clone().into_uint().unwrap();
+                        let reserve1 = r[1].clone().into_uint().unwrap();
+                        let (reserve_in, reserve_out) = if token0 == path[0] { (reserve0, reserve1) } else { (reserve1, reserve0) };
+                        let amount_in = tokens[1].clone().into_uint().unwrap_or_default();
+                        let expected = constant_product_output(amount_in, reserve_in, reserve_out);
+                        let transfer_sig: H256 = H256::from_slice(keccak256("Transfer(address,address,uint256)").as_slice());
+                        let mut actual_out = U256::zero();
+                        for log in &outcome.logs {
+                            if log.topics.get(0) == Some(&transfer_sig) {
+                                let to_addr = Address::from_slice(&log.topics[2].as_bytes()[12..]);
+                                if to_addr == tx.from {
+                                    actual_out = U256::from_big_endian(&log.data.0);
+                                }
+                            }
+                        }
+                        if expected > actual_out {
+                            slippage = (expected - actual_out).to_f64_lossy() / expected.to_f64_lossy();
+                        }
+                    }
+                }
+                break;
+            }
+        }
+
         let metrics = Metrics {
             swap_function: swap_variant,
-            token_route: Vec::new(),
-            slippage: 0.0,
+            token_route,
+            slippage,
             min_tokens_to_affect: U256::zero(),
             potential_profit: U256::zero(),
             router_address: tx.to,
-            router_name: Some("Universal Router".into()),
+            router_name: Some(format!("{:#x}", tx.to)),
         };
         Ok(AnalysisResult {
             potential_victim: true,
