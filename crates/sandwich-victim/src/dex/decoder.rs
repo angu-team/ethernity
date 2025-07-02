@@ -12,6 +12,7 @@ pub enum SwapFunction {
     ETHForExactTokens,
     SwapExactTokensForTokensSupportingFeeOnTransferTokens,
     SwapExactETHForTokensSupportingFeeOnTransferTokens,
+    SwapExactETHForTokensSupportingFeeOnTransferTokensWithReferrer,
     SwapExactTokensForETHSupportingFeeOnTransferTokens,
     ExactInputSingle,
     ExactInput,
@@ -50,6 +51,9 @@ impl SwapFunction {
             }
             SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens => {
                 "swapExactETHForTokensSupportingFeeOnTransferTokens(uint256,address[],address,uint256)"
+            }
+            SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokensWithReferrer => {
+                "swapExactETHForTokensSupportingFeeOnTransferTokens(uint256,address[],address,uint256,address)"
             }
             SwapFunction::SwapExactTokensForETHSupportingFeeOnTransferTokens => {
                 "swapExactTokensForETHSupportingFeeOnTransferTokens(uint256,uint256,address[],address,uint256)"
@@ -90,6 +94,7 @@ pub fn detect_swap_function(data: &[u8]) -> Option<(SwapFunction, Function)> {
         (SwapFunction::ETHForExactTokens, "swapETHForExactTokens(uint256,address[],address,uint256)"),
         (SwapFunction::SwapExactTokensForTokensSupportingFeeOnTransferTokens, "swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256,uint256,address[],address,uint256)"),
         (SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens, "swapExactETHForTokensSupportingFeeOnTransferTokens(uint256,address[],address,uint256)"),
+        (SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokensWithReferrer, "swapExactETHForTokensSupportingFeeOnTransferTokens(uint256,address[],address,uint256,address)"),
         (SwapFunction::SwapExactTokensForETHSupportingFeeOnTransferTokens, "swapExactTokensForETHSupportingFeeOnTransferTokens(uint256,uint256,address[],address,uint256)"),
         (SwapFunction::ExactInputSingle, "exactInputSingle((address,address,uint24,address,uint256,uint256,uint256,uint160))"),
         (SwapFunction::ExactInput, "exactInput((bytes,address,uint256,uint256,uint256))"),

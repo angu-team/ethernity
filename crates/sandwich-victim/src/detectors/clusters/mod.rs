@@ -28,6 +28,7 @@ impl From<&SwapFunction> for Cluster {
             | SwapFunction::ETHForExactTokens
             | SwapFunction::SwapExactTokensForTokensSupportingFeeOnTransferTokens
             | SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens
+            | SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokensWithReferrer
             | SwapFunction::SwapExactTokensForETHSupportingFeeOnTransferTokens
             | SwapFunction::SwapV2ExactIn => Cluster::UniswapV2,
             SwapFunction::ExactInputSingle

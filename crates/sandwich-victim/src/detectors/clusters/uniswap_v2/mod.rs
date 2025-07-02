@@ -135,7 +135,8 @@ pub async fn analyze_uniswap_v2(
                 )
             }
             SwapFunction::SwapExactETHForTokens
-            | SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens => {
+            | SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens
+            | SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokensWithReferrer => {
                 let amount_out_min = tokens[0].clone().into_uint().unwrap();
                 let path: Vec<Address> = tokens[1]
                     .clone()
@@ -452,7 +453,8 @@ pub async fn analyze_uniswap_v2_with_outcome(
                 )
             }
             SwapFunction::SwapExactETHForTokens
-            | SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens => {
+            | SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokens
+            | SwapFunction::SwapExactETHForTokensSupportingFeeOnTransferTokensWithReferrer => {
                 let amount_out_min = tokens[0].clone().into_uint().unwrap();
                 let path: Vec<Address> = tokens[1]
                     .clone()
