@@ -172,10 +172,12 @@ pub async fn analyze_universal_router(
                 token_route = path.clone();
 
                 if path.len() == 2 {
-                    let swap_topic: H256 =
-                        H256::from_slice(keccak256("Swap(address,uint256,uint256,uint256,uint256,address)").as_slice());
+                    let swap_topic: H256 = H256::from_slice(
+                        keccak256("Swap(address,uint256,uint256,uint256,uint256,address)")
+                            .as_slice(),
+                    );
                     let mut selected_log = None;
-                    for (idx, log) in outcome.logs.iter().enumerate() {
+                    for (_idx, log) in outcome.logs.iter().enumerate() {
                         if log.topics.get(0) != Some(&swap_topic) {
                             continue;
                         }
@@ -184,14 +186,15 @@ pub async fn analyze_universal_router(
                             Ok(t) => t,
                             Err(_) => continue,
                         };
-                        if (token0 == path[0] && token1 == path[1]) || (token1 == path[0] && token0 == path[1]) {
-                            selected_log = Some((pair, idx));
+                        if (token0 == path[0] && token1 == path[1])
+                            || (token1 == path[0] && token0 == path[1])
+                        {
+                            selected_log = Some((pair, token0, token1));
                             break;
                         }
                     }
 
-                    if let Some((pair, _log_idx)) = selected_log {
-                        let (token0, token1) = get_pair_tokens(&*rpc_client, pair).await?;
+                    if let Some((pair, token0, token1)) = selected_log {
                         let abi_res = AbiParser::default()
                             .parse_function("getReserves() returns (uint112,uint112,uint32)")?;
                         let tx_call = TransactionRequest::new()
@@ -212,10 +215,8 @@ pub async fn analyze_universal_router(
                             .ok_or_else(|| anyhow!("reserve1 decode"))?;
                         let (reserve_in, reserve_out) = if token0 == path[0] && token1 == path[1] {
                             (reserve0, reserve1)
-                        } else if token1 == path[0] && token0 == path[1] {
-                            (reserve1, reserve0)
                         } else {
-                            continue;
+                            (reserve1, reserve0)
                         };
                         let transfer_sig: H256 = H256::from_slice(
                             keccak256("Transfer(address,address,uint256)").as_slice(),
@@ -225,7 +226,8 @@ pub async fn analyze_universal_router(
                                 .get(1)
                                 .and_then(|t| t.clone().into_uint())
                                 .ok_or_else(|| anyhow!("missing amountIn"))?;
-                            let expected = constant_product_output(amount_in, reserve_in, reserve_out);
+                            let expected =
+                                constant_product_output(amount_in, reserve_in, reserve_out);
                             let recipient = tokens
                                 .get(0)
                                 .and_then(|t| t.clone().into_address())
@@ -244,7 +246,8 @@ pub async fn analyze_universal_router(
                                 }
                             }
                             if expected > actual_out && !expected.is_zero() {
-                                slippage = (expected - actual_out).to_f64_lossy() / expected.to_f64_lossy();
+                                slippage = (expected - actual_out).to_f64_lossy()
+                                    / expected.to_f64_lossy();
                             }
                         } else {
                             let amount_out = tokens
@@ -273,7 +276,8 @@ pub async fn analyze_universal_router(
                                     }
                                 }
                                 if actual_in > expected_in && !expected_in.is_zero() {
-                                    slippage = (actual_in - expected_in).to_f64_lossy() / expected_in.to_f64_lossy();
+                                    slippage = (actual_in - expected_in).to_f64_lossy()
+                                        / expected_in.to_f64_lossy();
                                 }
                             }
                         }
