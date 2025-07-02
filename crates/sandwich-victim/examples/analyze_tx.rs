@@ -63,7 +63,7 @@ async fn main() -> anyhow::Result<()> {
     println!("Potencial vítima: {}", result.potential_victim);
     println!("Economicamente viável: {}", result.economically_viable);
     println!("Slippage: {:.4}", result.metrics.slippage);
-    println!("Router: {:?}", result.metrics.router_name);
+    println!("Router: {:#x}", result.metrics.router_address);
     println!("Rota de tokens: {:?}", result.metrics.token_route);
     if let Some(hash) = result.simulated_tx {
         println!("Tx simulada: {hash:?}");
