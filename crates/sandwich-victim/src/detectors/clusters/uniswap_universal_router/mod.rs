@@ -8,12 +8,15 @@ use async_trait::async_trait;
 use ethereum_types::{Address, U256};
 use ethernity_core::traits::RpcProvider;
 use ethers::abi::AbiParser;
+use ethers::prelude::{Http, Middleware, Provider, TransactionRequest};
+use ethers::types::BlockId;
 use ethers::utils::{id, keccak256};
 use ethereum_types::H256;
 use once_cell::sync::Lazy;
 use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 
 /// Detector for Uniswap Universal Router interactions.
 pub struct UniswapUniversalRouterDetector;
@@ -60,22 +63,26 @@ impl crate::detectors::VictimDetector for UniswapUniversalRouterDetector {
     async fn analyze(
         &self,
         rpc_client: Arc<dyn RpcProvider>,
-        _rpc_endpoint: String,
+        rpc_endpoint: String,
         tx: TransactionData,
         block: Option<u64>,
         outcome: SimulationOutcome,
         _router: RouterInfo,
     ) -> Result<AnalysisResult> {
-        analyze_universal_router(rpc_client, tx, outcome, block).await
+        analyze_universal_router(rpc_client, rpc_endpoint, tx, outcome, block).await
     }
 }
 
 pub async fn analyze_universal_router(
-    rpc_client: Arc<dyn RpcProvider>,
+    _rpc_client: Arc<dyn RpcProvider>,
+    rpc_endpoint: String,
     tx: TransactionData,
     _outcome: SimulationOutcome,
     block: Option<u64>,
 ) -> Result<AnalysisResult> {
+    let provider = Provider::<Http>::try_from(rpc_endpoint.clone())?
+        .interval(Duration::from_millis(1));
+    let call_block = block.map(|b| BlockId::Number(b.into()));
     let outcome = FilterPipeline::new()
         .push(SwapLogFilter)
         .run(_outcome)
@@ -139,11 +146,13 @@ pub async fn analyze_universal_router(
                     "v2SwapExactOutput(address,uint256,uint256,address[],address)"
                 };
                 let f = AbiParser::default().parse_function(func_sig)?;
-                let tokens = f.decode_input(&inputs[idx])?;
-                let path: Vec<Address> = tokens[3]
-                    .clone()
-                    .into_array()
-                    .unwrap()
+                let input_data = match inputs.get(idx) {
+                    Some(d) => d,
+                    None => break,
+                };
+                let tokens = f.decode_input(input_data)?;
+                let path_tokens = tokens.get(3).and_then(|t| t.clone().into_array()).ok_or_else(|| anyhow!("missing path"))?;
+                let path: Vec<Address> = path_tokens
                     .into_iter()
                     .map(|t| t.into_address().unwrap())
                     .collect();
@@ -157,30 +166,42 @@ pub async fn analyze_universal_router(
                         let pair = log.address;
                         let abi_token = AbiParser::default().parse_function("token0() view returns (address)")?;
                         let data = abi_token.encode_input(&[])?;
-                        let out = rpc_client.call(pair, data.clone()).await?;
+                        let tx_call = TransactionRequest::new().to(pair).data(data.clone());
+                        let out = provider.call(&tx_call.into(), call_block).await.map_err(|e| anyhow!(e))?;
                         let token0 = abi_token.decode_output(&out)?[0].clone().into_address().unwrap();
                         let abi_token1 = AbiParser::default().parse_function("token1() view returns (address)")?;
-                        let out1 = rpc_client.call(pair, abi_token1.encode_input(&[])?).await?;
+                        let tx_call = TransactionRequest::new().to(pair).data(abi_token1.encode_input(&[])?);
+                        let out1 = provider.call(&tx_call.into(), call_block).await.map_err(|e| anyhow!(e))?;
                         let token1 = abi_token1.decode_output(&out1)?[0].clone().into_address().unwrap();
                         let abi_res = AbiParser::default().parse_function("getReserves() returns (uint112,uint112,uint32)")?;
-                        let res_out = rpc_client.call(pair, abi_res.encode_input(&[])?).await?;
+                        let tx_call = TransactionRequest::new().to(pair).data(abi_res.encode_input(&[])?);
+                        let res_out = provider.call(&tx_call.into(), call_block).await.map_err(|e| anyhow!(e))?;
                         let r = abi_res.decode_output(&res_out)?;
                         let reserve0 = r[0].clone().into_uint().unwrap();
                         let reserve1 = r[1].clone().into_uint().unwrap();
-                        let (reserve_in, reserve_out) = if token0 == path[0] { (reserve0, reserve1) } else { (reserve1, reserve0) };
-                        let amount_in = tokens[1].clone().into_uint().unwrap_or_default();
+                        let (reserve_in, reserve_out) = if token0 == path[0] && token1 == path[1] {
+                            (reserve0, reserve1)
+                        } else if token1 == path[0] && token0 == path[1] {
+                            (reserve1, reserve0)
+                        } else {
+                            continue;
+                        };
+                        let amount_in = tokens
+                            .get(1)
+                            .map(|t| t.clone().into_uint().unwrap_or_default())
+                            .unwrap_or_default();
                         let expected = constant_product_output(amount_in, reserve_in, reserve_out);
                         let transfer_sig: H256 = H256::from_slice(keccak256("Transfer(address,address,uint256)").as_slice());
                         let mut actual_out = U256::zero();
                         for log in &outcome.logs {
-                            if log.topics.get(0) == Some(&transfer_sig) {
+                            if log.topics.get(0) == Some(&transfer_sig) && log.topics.len() >= 3 {
                                 let to_addr = Address::from_slice(&log.topics[2].as_bytes()[12..]);
                                 if to_addr == tx.from {
                                     actual_out = U256::from_big_endian(&log.data.0);
                                 }
                             }
                         }
-                        if expected > actual_out {
+                        if expected > actual_out && !expected.is_zero() {
                             slippage = (expected - actual_out).to_f64_lossy() / expected.to_f64_lossy();
                         }
                     }
