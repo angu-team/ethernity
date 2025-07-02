@@ -36,4 +36,20 @@ pub fn simulate_sandwich_profit(amount_in: U256, reserve_in: U256, reserve_out: 
     if back_out > front { back_out - front } else { U256::zero() }
 }
 
+pub fn constant_product_input(
+    amount_out: U256,
+    reserve_in: U256,
+    reserve_out: U256,
+) -> Option<U256> {
+    if amount_out >= reserve_out {
+        return None;
+    }
+    let denominator = reserve_out - amount_out;
+    if denominator.is_zero() {
+        return None;
+    }
+    let numerator = reserve_in * amount_out;
+    Some(numerator / denominator + U256::one())
+}
+
 

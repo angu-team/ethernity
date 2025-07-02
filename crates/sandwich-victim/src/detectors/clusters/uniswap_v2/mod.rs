@@ -1,7 +1,9 @@
 pub mod exact_in;
 pub use exact_in::SwapV2ExactInDetector;
 
-use crate::core::metrics::{constant_product_output, simulate_sandwich_profit, U256Ext};
+use crate::core::metrics::{
+    constant_product_input, constant_product_output, simulate_sandwich_profit, U256Ext,
+};
 use crate::dex::{detect_swap_function, get_pair_address, RouterInfo, SwapFunction};
 use crate::filters::{FilterPipeline, SwapLogFilter};
 use crate::simulation::{simulate_transaction, SimulationConfig, SimulationOutcome};
@@ -280,10 +282,10 @@ pub async fn analyze_uniswap_v2(
         }
     } else if let Some(a_out) = amount_out {
         if pair_addr_opt.is_some() || router.factory.is_none() {
-            let numerator = reserve_in * a_out;
-            let denominator = reserve_out - a_out;
-            let inp = if denominator.is_zero() { U256::zero() } else { (numerator / denominator) + 1 }; // round up
-            (None, Some(inp))
+            match constant_product_input(a_out, reserve_in, reserve_out) {
+                Some(inp) => (None, Some(inp)),
+                None => (None, None),
+            }
         } else {
             let abi = AbiParser::default()
                 .parse_function("getAmountsIn(uint256,address[]) returns (uint256[])")?;
@@ -609,10 +611,10 @@ pub async fn analyze_uniswap_v2_with_outcome(
         }
     } else if let Some(a_out) = amount_out {
         if pair_addr_opt.is_some() || router.factory.is_none() {
-            let numerator = reserve_in * a_out;
-            let denominator = reserve_out - a_out;
-            let inp = if denominator.is_zero() { U256::zero() } else { (numerator / denominator) + 1 };
-            (None, Some(inp))
+            match constant_product_input(a_out, reserve_in, reserve_out) {
+                Some(inp) => (None, Some(inp)),
+                None => (None, None),
+            }
         } else {
             let abi = AbiParser::default()
                 .parse_function("getAmountsIn(uint256,address[]) returns (uint256[])")?;
