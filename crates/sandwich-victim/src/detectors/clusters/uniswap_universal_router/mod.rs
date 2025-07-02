@@ -201,11 +201,6 @@ pub async fn analyze_universal_router(
                         } else {
                             continue;
                         };
-                        let amount_in = tokens
-                            .get(1)
-                            .map(|t| t.clone().into_uint().unwrap_or_default())
-                            .unwrap_or_default();
-                        let expected = constant_product_output(amount_in, reserve_in, reserve_out);
                         let transfer_sig: H256 = H256::from_slice(keccak256("Transfer(address,address,uint256)").as_slice());
                         if op == 0x08 {
                             let amount_in = tokens
