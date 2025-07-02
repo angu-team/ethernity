@@ -1,10 +1,10 @@
+use crate::core::metrics::U256Ext;
 use crate::dex::{
     detect_swap_function, quote_exact_input, quote_exact_output, RouterInfo, SwapFunction,
 };
 use crate::filters::{FilterPipeline, SwapLogFilter};
 use crate::simulation::{simulate_transaction, SimulationConfig, SimulationOutcome};
 use crate::types::{AnalysisResult, Metrics, TransactionData};
-use crate::core::metrics::U256Ext;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use ethernity_core::traits::RpcProvider;
@@ -155,30 +155,45 @@ pub async fn analyze_uniswap_v3(
 
             let transfer_sig: H256 =
                 H256::from_slice(keccak256("Transfer(address,address,uint256)").as_slice());
+            // Accumulate all transfers to and from the user to capture the
+            // total amounts swapped in multi-hop transactions.
             let mut actual_out = U256::zero();
             let mut actual_in = U256::zero();
             for log in &logs {
                 if log.topics.get(0) == Some(&transfer_sig) && log.topics.len() == 3 {
                     let from_addr = Address::from_slice(&log.topics[1].as_bytes()[12..]);
                     let to_addr = Address::from_slice(&log.topics[2].as_bytes()[12..]);
+                    let amount = U256::from_big_endian(&log.data.0);
                     if to_addr == tx.from {
-                        actual_out = U256::from_big_endian(&log.data.0);
+                        actual_out += amount;
                     }
                     if from_addr == tx.from {
-                        actual_in = U256::from_big_endian(&log.data.0);
+                        actual_in += amount;
                     }
                 }
             }
 
+            // Guard against divisions where the f64 conversion of the expected
+            // amount is zero (which can happen for extremely large values).
             let slippage = if let Some(exp_out) = expected_out {
                 if exp_out > actual_out {
-                    (exp_out - actual_out).to_f64_lossy() / exp_out.to_f64_lossy()
+                    let denom = exp_out.to_f64_lossy();
+                    if denom > 0.0 {
+                        (exp_out - actual_out).to_f64_lossy() / denom
+                    } else {
+                        0.0
+                    }
                 } else {
                     0.0
                 }
             } else if let Some(exp_in) = expected_in {
                 if actual_in > exp_in {
-                    (actual_in - exp_in).to_f64_lossy() / exp_in.to_f64_lossy()
+                    let denom = exp_in.to_f64_lossy();
+                    if denom > 0.0 {
+                        (actual_in - exp_in).to_f64_lossy() / denom
+                    } else {
+                        0.0
+                    }
                 } else {
                     0.0
                 }
@@ -221,4 +236,3 @@ fn decode_path(path: &[u8]) -> Vec<Address> {
     }
     tokens
 }
-
