@@ -1,4 +1,5 @@
 use crate::dex::{RouterInfo, SwapFunction};
+use crate::dex::query::get_pair_tokens;
 use crate::filters::{FilterPipeline, SwapLogFilter};
 use crate::simulation::SimulationOutcome;
 use crate::core::metrics::{constant_product_input, constant_product_output, U256Ext};
@@ -74,10 +75,10 @@ impl crate::detectors::VictimDetector for UniswapUniversalRouterDetector {
 }
 
 pub async fn analyze_universal_router(
-    _rpc_client: Arc<dyn RpcProvider>,
+    rpc_client: Arc<dyn RpcProvider>,
     rpc_endpoint: String,
     tx: TransactionData,
-    _outcome: SimulationOutcome,
+    outcome: SimulationOutcome,
     block: Option<u64>,
 ) -> Result<AnalysisResult> {
     let provider = Provider::<Http>::try_from(rpc_endpoint.clone())?
@@ -85,7 +86,7 @@ pub async fn analyze_universal_router(
     let call_block = block.map(|b| BlockId::Number(b.into()));
     let outcome = FilterPipeline::new()
         .push(SwapLogFilter)
-        .run(_outcome)
+        .run(outcome)
         .ok_or(anyhow!("No swap event"))?;
     let execute_selector = &id("execute(bytes,bytes[])")[..4];
     let execute_deadline_selector = &id("execute(bytes,bytes[],uint256)")[..4];
@@ -171,23 +172,7 @@ pub async fn analyze_universal_router(
                     );
                     if let Some(log) = outcome.logs.iter().find(|l| l.topics.get(0) == Some(&swap_topic)) {
                         let pair = log.address;
-                        let abi_token = AbiParser::default().parse_function("token0() view returns (address)")?;
-                        let data = abi_token.encode_input(&[])?;
-                        let tx_call = TransactionRequest::new().to(pair).data(data.clone());
-                        let out = provider.call(&tx_call.into(), call_block).await.map_err(|e| anyhow!(e))?;
-                        let token0 = abi_token
-                            .decode_output(&out)?
-                            .get(0)
-                            .and_then(|t| t.clone().into_address())
-                            .ok_or_else(|| anyhow!("token0 decode failed"))?;
-                        let abi_token1 = AbiParser::default().parse_function("token1() view returns (address)")?;
-                        let tx_call = TransactionRequest::new().to(pair).data(abi_token1.encode_input(&[])?);
-                        let out1 = provider.call(&tx_call.into(), call_block).await.map_err(|e| anyhow!(e))?;
-                        let token1 = abi_token1
-                            .decode_output(&out1)?
-                            .get(0)
-                            .and_then(|t| t.clone().into_address())
-                            .ok_or_else(|| anyhow!("token1 decode failed"))?;
+                        let (token0, token1) = get_pair_tokens(&*rpc_client, pair).await?;
                         let abi_res = AbiParser::default().parse_function("getReserves() returns (uint112,uint112,uint32)")?;
                         let tx_call = TransactionRequest::new().to(pair).data(abi_res.encode_input(&[])?);
                         let res_out = provider.call(&tx_call.into(), call_block).await.map_err(|e| anyhow!(e))?;
