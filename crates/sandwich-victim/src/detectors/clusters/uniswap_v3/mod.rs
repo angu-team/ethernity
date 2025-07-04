@@ -1,13 +1,13 @@
+use crate::core::metrics::U256Ext;
 use crate::dex::RouterInfo;
 use crate::simulation::SimulationOutcome;
 use crate::types::{AnalysisResult, Metrics, TransactionData};
-use crate::core::metrics::U256Ext;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use ethereum_types::{Address, U256};
 use ethernity_core::traits::RpcProvider;
 use ethers::types::H256;
 use ethers::utils::keccak256;
-use ethereum_types::{Address, U256};
 use std::sync::Arc;
 
 /// Detector para funções do Uniswap V3 Router.
@@ -49,32 +49,26 @@ impl crate::detectors::VictimDetector for UniswapV3Detector {
         let _sqrt_price_limit = U256::from_big_endian(iter.next().unwrap());
         let kind = crate::dex::SwapFunction::SwapV3ExactIn;
 
-        // Derive a more reliable token route using the intermediate tokens.
-        // The calldata does not always store the exact input/output tokens in
-        // the first two fields. Empirically the last two addresses correspond
-        // to the actual swap route when multihops are involved. Use them when
-        // present; otherwise fall back to the raw fields.
-        let mut path = Vec::new();
-        if through1 != Address::zero() && through2 != Address::zero() {
+        // Constrói a rota de tokens conforme declarada nos parâmetros
+        // tokenIn -> [tokenThrough1] -> [tokenThrough2] -> tokenOut.
+        let mut path = vec![token_in_raw];
+        if through1 != Address::zero() {
             path.push(through1);
-            path.push(through2);
-        } else {
-            path.push(token_in_raw);
-            if through1 != Address::zero() {
-                path.push(through1);
-            }
-            if through2 != Address::zero() {
-                path.push(through2);
-            }
-            path.push(token_out_raw);
         }
+        if through2 != Address::zero() {
+            path.push(through2);
+        }
+        path.push(token_out_raw);
 
         let transfer_sig: H256 =
             H256::from_slice(keccak256("Transfer(address,address,uint256)").as_slice());
         let token_out = *path.last().unwrap_or(&token_out_raw);
         let mut actual_out = U256::zero();
         for log in &outcome.logs {
-            if log.address == token_out && log.topics.get(0) == Some(&transfer_sig) && log.topics.len() >= 3 {
+            if log.address == token_out
+                && log.topics.get(0) == Some(&transfer_sig)
+                && log.topics.len() >= 3
+            {
                 let to_addr = Address::from_slice(&log.topics[2].as_bytes()[12..]);
                 if to_addr == recipient {
                     actual_out = U256::from_big_endian(&log.data.0);
