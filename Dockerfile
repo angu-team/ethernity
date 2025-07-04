@@ -21,4 +21,4 @@ ENV PATH="/root/.foundry/bin:${PATH}"
 
 COPY . .
 
-CMD ["cargo", "run", "-p", "sandwich-victim", "--example", "mempool_watch", "--", "ws://116.202.218.100:8546"]
+CMD ["cargo", "run", "-p", "sandwich-victim", "--example", "mempool_watch", "--", "ws://148.251.183.245:8546"]
