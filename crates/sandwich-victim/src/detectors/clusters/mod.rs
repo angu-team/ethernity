@@ -1,10 +1,10 @@
+pub mod oneinch_aggregation_router_v6;
+pub mod oneinch_generic_router;
+pub mod smart_router;
+pub mod uniswap_universal_router;
 pub mod uniswap_v2;
 pub mod uniswap_v3;
 pub mod uniswap_v4;
-pub mod smart_router;
-pub mod oneinch_generic_router;
-pub mod oneinch_aggregation_router_v6;
-pub mod uniswap_universal_router;
 
 /// Agrupamento semântico das implementações de detectores.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,7 +35,8 @@ impl From<&SwapFunction> for Cluster {
             SwapFunction::ExactInputSingle
             | SwapFunction::ExactInput
             | SwapFunction::ExactOutputSingle
-            | SwapFunction::ExactOutput => Cluster::UniswapV3,
+            | SwapFunction::ExactOutput
+            | SwapFunction::SwapV3ExactIn => Cluster::UniswapV3,
             SwapFunction::UniversalRouterSwap | SwapFunction::UniversalRouterSwapDeadline => {
                 Cluster::UniswapUniversalRouter
             }
