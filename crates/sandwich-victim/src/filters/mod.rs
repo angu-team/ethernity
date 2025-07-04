@@ -43,12 +43,18 @@ impl FilterPipeline {
 /// Filtro que verifica a presença do evento `Swap` nos logs
 pub struct SwapLogFilter;
 
-const SWAP_TOPIC: &str = "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822";
+const SWAP_TOPIC_V2: &str = "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822";
+const SWAP_TOPIC_V3: &str = "0x19b47279256b2a23a1665c810c8d55a1758940ee09377d4f8d26497a3577dc83";
 
 impl Filter for SwapLogFilter {
     fn apply(&self, outcome: SimulationOutcome) -> Option<SimulationOutcome> {
-        let topic = H256::from_str(SWAP_TOPIC).expect("valid topic hex");
-        if outcome.logs.iter().any(|log| log.topics.get(0) == Some(&topic)) {
+        let topic_v2 = H256::from_str(SWAP_TOPIC_V2).expect("valid topic hex");
+        let topic_v3 = H256::from_str(SWAP_TOPIC_V3).expect("valid topic hex");
+        if outcome
+            .logs
+            .iter()
+            .any(|log| log.topics.get(0) == Some(&topic_v2) || log.topics.get(0) == Some(&topic_v3))
+        {
             Some(outcome)
         } else {
             None

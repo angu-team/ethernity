@@ -19,6 +19,7 @@ pub enum SwapFunction {
     ExactOutputSingle,
     ExactOutput,
     SwapV2ExactIn,
+    SwapV3ExactIn,
     /// Any swap function of the 1inch Aggregation Router V6
     AggregationRouterV6Swap,
     /// `UniversalRouter.execute(bytes,bytes[])`
@@ -74,6 +75,9 @@ impl SwapFunction {
             }
             SwapFunction::SwapV2ExactIn => {
                 "swapV2ExactIn(address,address,uint256,uint256,address)"
+            }
+            SwapFunction::SwapV3ExactIn => {
+                "swapV3ExactIn((address,address,address,address,uint24,address,uint256,uint256,uint256,uint160))"
             }
             // Although the Aggregation Router V6 exposes many swap variants,
             // `aggregationSwap(bytes)` is used as a canonical placeholder when
@@ -167,6 +171,12 @@ pub fn detect_swap_function(data: &[u8]) -> Option<(SwapFunction, Function)> {
             .parse_function("aggregationSwap(bytes)")
             .expect("abi parse");
         return Some((SwapFunction::AggregationRouterV6Swap, f));
+    }
+    if selector == &[0x18, 0x61, 0xa3, 0xd8] {
+        let f = AbiParser::default()
+            .parse_function("swapV3ExactIn(bytes)")
+            .expect("abi parse");
+        return Some((SwapFunction::SwapV3ExactIn, f));
     }
     None
 }

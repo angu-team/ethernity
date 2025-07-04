@@ -58,11 +58,18 @@ where
 
 /// Tenta extrair o endereço do router a partir dos logs de simulação
 pub fn router_from_logs(logs: &[Log]) -> Option<Address> {
-    let swap_sig = H256::from_slice(
-        keccak256("Swap(address,uint256,uint256,uint256,uint256,address)").as_slice(),
+    let swap_sig_v2 =
+        H256::from_slice(keccak256("Swap(address,uint256,uint256,uint256,uint256,address)").as_slice());
+    let swap_sig_v3 = H256::from_slice(
+        keccak256(
+            "Swap(address,address,int256,int256,uint160,uint128,int24,uint128,uint128)",
+        )
+        .as_slice(),
     );
     for log in logs {
-        if log.topics.get(0) == Some(&swap_sig) && log.topics.len() > 1 {
+        if log.topics.get(0) == Some(&swap_sig_v2) && log.topics.len() > 1 {
+            return Some(Address::from_slice(&log.topics[1].as_bytes()[12..]));
+        } else if log.topics.get(0) == Some(&swap_sig_v3) && log.topics.len() > 1 {
             return Some(Address::from_slice(&log.topics[1].as_bytes()[12..]));
         }
     }
