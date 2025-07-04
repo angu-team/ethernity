@@ -86,7 +86,7 @@ mod tests {
 
     #[test]
     fn filter_passes_when_topic_present() {
-        let outcome = outcome_with_topics(vec![H256::from_str(SWAP_TOPIC).unwrap()]);
+        let outcome = outcome_with_topics(vec![H256::from_str(SWAP_TOPIC_V2).unwrap()]);
         let pipeline = FilterPipeline::new().push(SwapLogFilter);
         assert!(pipeline.run(outcome).is_some());
     }

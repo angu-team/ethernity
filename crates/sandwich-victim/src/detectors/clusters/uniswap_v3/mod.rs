@@ -37,8 +37,8 @@ impl crate::detectors::VictimDetector for UniswapV3Detector {
             return Err(anyhow!("invalid calldata"));
         }
         let mut iter = data.chunks_exact(32);
-        let token_in = Address::from_slice(&iter.next().unwrap()[12..]);
-        let token_out = Address::from_slice(&iter.next().unwrap()[12..]);
+        let token_in_raw = Address::from_slice(&iter.next().unwrap()[12..]);
+        let token_out_raw = Address::from_slice(&iter.next().unwrap()[12..]);
         let through1 = Address::from_slice(&iter.next().unwrap()[12..]);
         let through2 = Address::from_slice(&iter.next().unwrap()[12..]);
         let _fee = U256::from_big_endian(iter.next().unwrap());
@@ -49,20 +49,32 @@ impl crate::detectors::VictimDetector for UniswapV3Detector {
         let _sqrt_price_limit = U256::from_big_endian(iter.next().unwrap());
         let kind = crate::dex::SwapFunction::SwapV3ExactIn;
 
-        let mut path = vec![token_in];
-        if through1 != Address::zero() {
+        // Derive a more reliable token route using the intermediate tokens.
+        // The calldata does not always store the exact input/output tokens in
+        // the first two fields. Empirically the last two addresses correspond
+        // to the actual swap route when multihops are involved. Use them when
+        // present; otherwise fall back to the raw fields.
+        let mut path = Vec::new();
+        if through1 != Address::zero() && through2 != Address::zero() {
             path.push(through1);
-        }
-        if through2 != Address::zero() {
             path.push(through2);
+        } else {
+            path.push(token_in_raw);
+            if through1 != Address::zero() {
+                path.push(through1);
+            }
+            if through2 != Address::zero() {
+                path.push(through2);
+            }
+            path.push(token_out_raw);
         }
-        path.push(token_out);
 
         let transfer_sig: H256 =
             H256::from_slice(keccak256("Transfer(address,address,uint256)").as_slice());
+        let token_out = *path.last().unwrap_or(&token_out_raw);
         let mut actual_out = U256::zero();
         for log in &outcome.logs {
-            if log.topics.get(0) == Some(&transfer_sig) && log.topics.len() >= 3 {
+            if log.address == token_out && log.topics.get(0) == Some(&transfer_sig) && log.topics.len() >= 3 {
                 let to_addr = Address::from_slice(&log.topics[2].as_bytes()[12..]);
                 if to_addr == recipient {
                     actual_out = U256::from_big_endian(&log.data.0);
