@@ -59,10 +59,12 @@ async fn mempool_listener(
     println!("Escutando transações pendentes...");
 
     while let Some(res) = stream.next().await {
+        
         let tx = match res {
             Ok(tx) => tx,
             Err(err) => {
-                eprintln!("Erro ao obter transação: {err}");
+                // println!("{:?}",err);
+                // eprintln!("Erro ao obter transação: {err}");
                 continue;
             }
         };
@@ -77,7 +79,7 @@ async fn mempool_listener(
             gas_price: tx.gas_price.unwrap_or_default(),
             nonce: tx.nonce,
         };
-
+        
         if let Ok(result) = analyze_transaction(rpc_client.clone(), ws_url.clone(), tx_data, None).await {
             if result.potential_victim {
                 let detected_at = Local::now();
