@@ -19,6 +19,7 @@ pub enum SwapFunction {
     ExactOutputSingle,
     ExactOutput,
     SwapV2ExactIn,
+    SwapV3ExactIn,
     /// Any swap function of the 1inch Aggregation Router V6
     AggregationRouterV6Swap,
     /// `UniversalRouter.execute(bytes,bytes[])`
@@ -75,6 +76,9 @@ impl SwapFunction {
             SwapFunction::SwapV2ExactIn => {
                 "swapV2ExactIn(address,address,uint256,uint256,address)"
             }
+            SwapFunction::SwapV3ExactIn => {
+                "swapV3ExactIn((address,address,address,address,uint24,address,uint256,uint256,uint256,uint160))"
+            }
             // Although the Aggregation Router V6 exposes many swap variants,
             // `aggregationSwap(bytes)` is used as a canonical placeholder when
             // decoding fails. Use its signature here so `signature()` always
@@ -108,6 +112,10 @@ pub fn detect_swap_function(data: &[u8]) -> Option<(SwapFunction, Function)> {
         (SwapFunction::ExactOutputSingle, "exactOutputSingle((address,address,uint24,address,uint256,uint256,uint256,uint160))"),
         (SwapFunction::ExactOutput, "exactOutput((bytes,address,uint256,uint256,uint256))"),
         (SwapFunction::SwapV2ExactIn, "swapV2ExactIn(address,address,uint256,uint256,address)"),
+        (
+            SwapFunction::SwapV3ExactIn,
+            "swapV3ExactIn((address,address,address,address,uint24,address,uint256,uint256,uint256,uint160))",
+        ),
         // Uniswap Universal Router execute functions
         (
             SwapFunction::UniversalRouterSwap,
