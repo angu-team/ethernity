@@ -42,8 +42,8 @@ async fn main() -> Result<()> {
 
     tokio::try_join!(
         mempool_listener(provider.clone(), rpc_client.clone(), ws_url.clone(), victims.clone()),
-        block_listener(provider.clone(), victims.clone()),
-        cleanup_task(victims.clone(), Duration::from_secs(600)),
+        // block_listener(provider.clone(), victims.clone()),
+        // cleanup_task(victims.clone(), Duration::from_secs(600)),
     )?;
 
     Ok(())
@@ -63,8 +63,6 @@ async fn mempool_listener(
         let tx = match res {
             Ok(tx) => tx,
             Err(err) => {
-                // println!("{:?}",err);
-                // eprintln!("Erro ao obter transação: {err}");
                 continue;
             }
         };
@@ -79,21 +77,36 @@ async fn mempool_listener(
             gas_price: tx.gas_price.unwrap_or_default(),
             nonce: tx.nonce,
         };
-        
-        if let Ok(result) = analyze_transaction(rpc_client.clone(), ws_url.clone(), tx_data, None).await {
-            if result.potential_victim {
-                let detected_at = Local::now();
-                victims.insert(
-                    tx.hash,
-                    VictimInfo { detected_at, metrics: result.metrics },
-                );
-                println!(
-                    "[mempool {}] possível vítima {:?}",
-                    detected_at.format("%H:%M:%S%.3f"),
-                    tx.hash
-                );
-            }
+
+        let result = analyze_transaction(
+            rpc_client.clone(), ws_url.clone(), tx_data, None
+        )
+            .await?;
+
+        println!("Potencial vítima: {}", result.potential_victim);
+        println!("Economicamente viável: {}", result.economically_viable);
+        println!("Slippage: {:.4}", result.metrics.slippage);
+        println!("Router: {:#x}", result.metrics.router_address);
+        println!("Rota de tokens: {:?}", result.metrics.token_route);
+        if let Some(hash) = result.simulated_tx {
+            println!("Tx simulada: {hash:?}");
         }
+
+
+        // if let Ok(result) = analyze_transaction(rpc_client.clone(), ws_url.clone(), tx_data, None).await {
+        //     if result.potential_victim {
+        //         let detected_at = Local::now();
+        //         victims.insert(
+        //             tx.hash,
+        //             VictimInfo { detected_at, metrics: result.metrics },
+        //         );
+        //         println!(
+        //             "[mempool {}] possível vítima {:?}",
+        //             detected_at.format("%H:%M:%S%.3f"),
+        //             tx.hash
+        //         );
+        //     }
+        // }
     }
     Ok(())
 }
