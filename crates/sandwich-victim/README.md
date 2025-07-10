@@ -10,6 +10,9 @@ Biblioteca para detectar oportunidades de ataque *sandwich* em transações Ethe
 - reconhecimento de todas as variações de funções de swap V2
 - suporte ao Uniswap V3 SmartRouter com decodificação de multicalls
 
+O endpoint RPC utilizado na simulação pode ser HTTP ou WebSocket. URLs `ws://`
+ou `wss://` serão convertidas para o esquema correspondente automaticamente.
+
 A arquitetura segue o princípio de responsabilidade única. Cada módulo possui
 uma função clara:
 `core` contém o analisador de transações e cálculo de métricas,
