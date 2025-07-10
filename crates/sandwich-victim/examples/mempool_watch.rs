@@ -42,8 +42,8 @@ async fn main() -> Result<()> {
 
     tokio::try_join!(
         mempool_listener(provider.clone(), rpc_client.clone(), ws_url.clone(), victims.clone()),
-        block_listener(provider.clone(), victims.clone()),
-        cleanup_task(victims.clone(), Duration::from_secs(600)),
+        // block_listener(provider.clone(), victims.clone()),
+        // cleanup_task(victims.clone(), Duration::from_secs(600)),
     )?;
 
     Ok(())
