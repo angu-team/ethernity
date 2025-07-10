@@ -40,38 +40,39 @@ async fn mempool_listener(
     rpc_client: Arc<EthernityRpcClient>,
     ws_url: String,
 ) -> Result<()> {
-    let mut stream = provider.subscribe_pending_txs().await?.transactions_unordered(10);
+    let stream = provider.subscribe_pending_txs().await?.transactions_unordered(10);
     println!("Escutando transações pendentes...");
 
-    while let Some(res) = stream.next().await {
-        
-        let tx = match res {
-            Ok(tx) => tx,
-            Err(err) => {
-                // println!("{:?}",err);
-                // eprintln!("Erro ao obter transação: {err}");
-                continue;
-            }
-        };
+    stream
+        .for_each_concurrent(usize::MAX, |res| {
+            let rpc_client = rpc_client.clone();
+            let ws_url = ws_url.clone();
+            async move {
+                let tx = match res {
+                    Ok(tx) => tx,
+                    Err(_) => return,
+                };
 
-        let Some(to) = tx.to else { continue };
-        let tx_data = TransactionData {
-            from: tx.from,
-            to,
-            data: tx.input.to_vec(),
-            value: tx.value,
-            gas: tx.gas.as_u64(),
-            gas_price: tx.gas_price.unwrap_or_default(),
-            nonce: tx.nonce,
-        };
-        
-        match analyze_transaction(rpc_client.clone(), ws_url.clone(), tx_data, None).await {
-            Ok(result) if result.potential_victim => {
-                println!("possível vítima {:?}\n{:#?}", tx.hash, result.metrics);
+                let Some(to) = tx.to else { return };
+                let tx_data = TransactionData {
+                    from: tx.from,
+                    to,
+                    data: tx.input.to_vec(),
+                    value: tx.value,
+                    gas: tx.gas.as_u64(),
+                    gas_price: tx.gas_price.unwrap_or_default(),
+                    nonce: tx.nonce,
+                };
+
+                match analyze_transaction(rpc_client, ws_url, tx_data, None).await {
+                    Ok(result) if result.potential_victim => {
+                        println!("possível vítima {:?}\n{:#?}", tx.hash, result.metrics);
+                    }
+                    Ok(_) => {}
+                    Err(err) => eprintln!("Erro ao analisar tx {:?}: {err}", tx.hash),
+                }
             }
-            Ok(_) => {}
-            Err(err) => eprintln!("Erro ao analisar tx {:?}: {err}", tx.hash),
-        }
-    }
+        })
+        .await;
     Ok(())
 }
