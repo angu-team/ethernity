@@ -55,8 +55,7 @@ async fn mempool_listener(
         };
 
         let Some(to) = tx.to else { continue };
-        let current_block = rpc_client.get_block_number().await?;
-        let mut tx_data = TransactionData {
+        let tx_data = TransactionData {
             from: tx.from,
             to,
             data: tx.input.to_vec(),
@@ -64,10 +63,8 @@ async fn mempool_listener(
             gas: tx.gas.as_u64(),
             gas_price: tx.gas_price.unwrap_or_default(),
             nonce: tx.nonce,
-            block_number: Option::from(current_block - 1)
         };
         
-        println!("tx: {:?} block: {}", tx.hash, current_block);
         match analyze_transaction(rpc_client.clone(), ws_url.clone(), tx_data, None).await {
             Ok(result) if result.potential_victim => {
                 println!("possível vítima {:?}\n{:#?}", tx.hash, result.metrics);

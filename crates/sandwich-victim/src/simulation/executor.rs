@@ -32,7 +32,7 @@ pub async fn simulate_transaction(
     use ethers::utils::Anvil;
 
     let mut anvil = Anvil::new().fork(config.rpc_endpoint.clone());
-    if let Some(block) = tx.block_number {
+    if let Some(block) = config.block_number {
         anvil = anvil.fork_block_number(block);
     }
     let anvil = anvil.spawn();
