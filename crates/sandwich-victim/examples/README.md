@@ -18,6 +18,8 @@ O programa obtém os dados da transação e a executa em um fork local com o
 
 Este exemplo conecta-se a um endpoint RPC WebSocket e escuta as transações pendentes do mempool. Cada transação é analisada e, se houver indícios de que seja uma potencial vítima de *sandwich*, as métricas são exibidas no console.
 
+O exemplo foi simplificado e **não monitora a inclusão em blocos**. O foco é detectar oportunidades assim que as transações surgem no mempool.
+
 ```bash
 cargo run -p sandwich-victim --example mempool_watch -- <WS_RPC_ENDPOINT>
 ```
