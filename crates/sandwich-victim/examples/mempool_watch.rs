@@ -3,19 +3,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
-use chrono::Local;
-use dashmap::DashMap;
 use ethernity_rpc::{EthernityRpcClient, RpcConfig};
 use ethers::prelude::*;
 use futures::StreamExt;
 use sandwich_victim::core::analyze_transaction;
-use sandwich_victim::types::{Metrics, TransactionData};
-
-#[derive(Debug, Clone)]
-struct VictimInfo {
-    detected_at: chrono::DateTime<chrono::Local>,
-    metrics: Metrics,
-}
+use sandwich_victim::types::TransactionData;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -38,13 +30,7 @@ async fn main() -> Result<()> {
         .await?,
     );
 
-    let victims: Arc<DashMap<H256, VictimInfo>> = Arc::new(DashMap::new());
-
-    tokio::try_join!(
-        mempool_listener(provider.clone(), rpc_client.clone(), ws_url.clone(), victims.clone()),
-        // block_listener(provider.clone(), victims.clone()),
-        // cleanup_task(victims.clone(), Duration::from_secs(600)),
-    )?;
+    mempool_listener(provider.clone(), rpc_client.clone(), ws_url.clone()).await?;
 
     Ok(())
 }
@@ -53,7 +39,6 @@ async fn mempool_listener(
     provider: Arc<Provider<Ws>>,
     rpc_client: Arc<EthernityRpcClient>,
     ws_url: String,
-    victims: Arc<DashMap<H256, VictimInfo>>,
 ) -> Result<()> {
     let mut stream = provider.subscribe_pending_txs().await?.transactions_unordered(10);
     println!("Escutando transações pendentes...");
@@ -80,59 +65,13 @@ async fn mempool_listener(
             nonce: tx.nonce,
         };
         
-        if let Ok(result) = analyze_transaction(rpc_client.clone(), ws_url.clone(), tx_data, None).await {
-            println!("{:?}",result);
-            if result.potential_victim {
-                let detected_at = Local::now();
-                victims.insert(
-                    tx.hash,
-                    VictimInfo { detected_at, metrics: result.metrics },
-                );
-                println!(
-                    "[mempool {}] possível vítima {:?}",
-                    detected_at.format("%H:%M:%S%.3f"),
-                    tx.hash
-                );
+        match analyze_transaction(rpc_client.clone(), ws_url.clone(), tx_data, None).await {
+            Ok(result) if result.potential_victim => {
+                println!("possível vítima {:?}\n{:#?}", tx.hash, result.metrics);
             }
+            Ok(_) => {}
+            Err(err) => eprintln!("Erro ao analisar tx {:?}: {err}", tx.hash),
         }
     }
     Ok(())
-}
-
-async fn block_listener(
-    provider: Arc<Provider<Ws>>,
-    victims: Arc<DashMap<H256, VictimInfo>>,
-) -> Result<()> {
-    let mut blocks = provider.subscribe_blocks().await?;
-    println!("Escutando novos blocos...");
-
-    while let Some(block) = blocks.next().await {
-        let Some(number) = block.number else { continue };
-        for hash in block.transactions {
-            if let Some((_, info)) = victims.remove(&hash) {
-                println!("Tx {:?} confirmada no bloco {}", hash, number);
-                println!(
-                    "Detectada em {}",
-                    info.detected_at.format("%H:%M:%S%.3f")
-                );
-                println!("Slippage: {:.4}", info.metrics.slippage);
-                println!("Router: {:?}", info.metrics.router_name);
-                println!("Rota de tokens: {:?}", info.metrics.token_route);
-            }
-        }
-    }
-    Ok(())
-}
-
-async fn cleanup_task(
-    victims: Arc<DashMap<H256, VictimInfo>>,
-    ttl: Duration,
-) -> Result<()> {
-    let mut interval = tokio::time::interval(ttl);
-    loop {
-        interval.tick().await;
-        let now = Local::now();
-        let max_age = chrono::Duration::from_std(ttl).unwrap();
-        victims.retain(|_, info| now - info.detected_at <= max_age);
-    }
 }
