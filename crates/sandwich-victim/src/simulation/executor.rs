@@ -11,24 +11,6 @@ pub struct SimulationConfig {
     pub block_number: Option<u64>,
 }
 
-fn normalize_rpc_url(endpoint: &str) -> String {
-    match Url::parse(endpoint) {
-        Ok(mut url) => {
-            match url.scheme() {
-                "ws" => {
-                    let _ = url.set_scheme("http");
-                }
-                "wss" => {
-                    let _ = url.set_scheme("https");
-                }
-                _ => {}
-            }
-            url.to_string()
-        }
-        Err(_) => endpoint.to_string(),
-    }
-}
-
 /// Resultado simples da simulação
 #[derive(Debug, Clone)]
 pub struct SimulationOutcome {
@@ -50,21 +32,24 @@ pub async fn simulate_transaction(
 ) -> Result<SimulationOutcome> {
     use ethers::utils::Anvil;
 
-    let fork_url = normalize_rpc_url(&config.rpc_endpoint);
-    let mut anvil = Anvil::new().fork(fork_url);
+    let mut anvil = Anvil::new()
+        .fork(&config.rpc_endpoint)
+        .args(&[
+            "--auto-impersonate".to_string(),
+            "--no-mining".to_string(),
+            "--gas-price=0".to_string(),
+            "--base-fee=0".to_string(),
+            "--gas-limit=30000000".to_string(),      // Limite de gás fixo e alto
+
+        ]) // Define o limite de gás
+        // .path("/home/moinho/.foundry/bin/anvil"); // Caminho para o binário do Anvil
+        .path("/root/.foundry/bin/anvil");
     if let Some(block) = config.block_number {
         anvil = anvil.fork_block_number(block);
     }
     let anvil = anvil.spawn();
 
-    let provider = Provider::<Http>::try_from(anvil.endpoint())
-        .map_err(|e| SimulationError::ProviderCreation(e.to_string()))?
-        .interval(Duration::from_millis(1));
-
-    provider
-        .request::<_, ()>("anvil_impersonateAccount", [tx.from])
-        .await
-        .map_err(|e| SimulationError::ImpersonateAccount(e.to_string()))?;
+    let provider = Provider::<Http>::connect(&anvil.endpoint()).await;
 
     let tx_request = TransactionRequest::new()
         .from(tx.from)
