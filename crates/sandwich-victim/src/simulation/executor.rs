@@ -1,13 +1,32 @@
-use crate::types::TransactionData;
 use crate::simulation::error::{Result, SimulationError};
+use crate::types::TransactionData;
 use ethers::prelude::*;
 use std::time::Duration;
+use url::Url;
 
 /// Configurações para a simulação local
 #[derive(Debug, Clone)]
 pub struct SimulationConfig {
     pub rpc_endpoint: String,
     pub block_number: Option<u64>,
+}
+
+fn normalize_rpc_url(endpoint: &str) -> String {
+    match Url::parse(endpoint) {
+        Ok(mut url) => {
+            match url.scheme() {
+                "ws" => {
+                    let _ = url.set_scheme("http");
+                }
+                "wss" => {
+                    let _ = url.set_scheme("https");
+                }
+                _ => {}
+            }
+            url.to_string()
+        }
+        Err(_) => endpoint.to_string(),
+    }
 }
 
 /// Resultado simples da simulação
@@ -31,7 +50,8 @@ pub async fn simulate_transaction(
 ) -> Result<SimulationOutcome> {
     use ethers::utils::Anvil;
 
-    let mut anvil = Anvil::new().fork(config.rpc_endpoint.clone());
+    let fork_url = normalize_rpc_url(&config.rpc_endpoint);
+    let mut anvil = Anvil::new().fork(fork_url);
     if let Some(block) = config.block_number {
         anvil = anvil.fork_block_number(block);
     }
