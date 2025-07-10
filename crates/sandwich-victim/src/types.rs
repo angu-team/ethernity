@@ -12,6 +12,7 @@ pub struct TransactionData {
     pub gas: u64,
     pub gas_price: U256,
     pub nonce: U256,
+    pub block_number: Option<u64>,
 }
 
 /// Métricas extraídas durante a simulação
