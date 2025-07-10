@@ -38,15 +38,15 @@ impl Default for DetectorRegistry {
     fn default() -> Self {
         Self {
             detectors: vec![
-                Box::new(UniswapV3Detector),
-                Box::new(SmartRouterUniswapV3Detector),
-                Box::new(MulticallBytesDetector),
-                Box::new(OneInchGenericRouterDetector),
-                Box::new(OneInchAggregationRouterV6Detector),
-                Box::new(UniswapUniversalRouterDetector),
-                Box::new(UniswapV4Detector),
+                // Box::new(UniswapV3Detector),
+                // Box::new(SmartRouterUniswapV3Detector),
+                // Box::new(MulticallBytesDetector),
+                // Box::new(OneInchGenericRouterDetector),
+                // Box::new(OneInchAggregationRouterV6Detector),
+                // Box::new(UniswapUniversalRouterDetector),
+                // Box::new(UniswapV4Detector),
                 Box::new(UniswapV2Detector),
-                Box::new(SwapV2ExactInDetector),
+                // Box::new(SwapV2ExactInDetector),
             ],
         }
     }
