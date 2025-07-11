@@ -40,7 +40,7 @@ async fn mempool_listener(
     rpc_client: Arc<EthernityRpcClient>,
     ws_url: String,
 ) -> Result<()> {
-    let stream = provider.subscribe_pending_txs().await?.transactions_unordered(10000);
+    let stream = provider.subscribe_pending_txs().await?.transactions_unordered(usize::MAX);
     println!("Escutando transações pendentes...");
 
     stream
@@ -64,7 +64,7 @@ async fn mempool_listener(
                     nonce: tx.nonce,
                 };
 
-                match analyze_transaction(rpc_client, "http://116.202.218.100:8545".to_string(), tx_data, None).await {
+                match analyze_transaction(rpc_client, "http://148.251.183.245:8545".to_string(), tx_data, None).await {
                     Ok(result) if result.potential_victim => {
                         println!("possível vítima {:?}\n{:#?}", tx.hash, result.metrics);
                     }
