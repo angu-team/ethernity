@@ -13,9 +13,10 @@ use crate::{errors::{Result, SimulationError}, traits::{SimulationProvider, Simu
 pub struct AnvilSession {
     pub id: Uuid,
     provider: Provider<Http>,
-    _anvil: AnvilInstance,
+    anvil: Option<AnvilInstance>,
     created: Instant,
     timeout: Duration,
+    closed: bool,
 }
 
 impl AnvilSession {
@@ -29,6 +30,9 @@ impl SimulationSession for Mutex<AnvilSession> {
     async fn send_transaction(&self, tx: &TypedTransaction) -> Result<TransactionReceipt> {
         let provider = {
             let guard = self.lock().await;
+            if guard.closed {
+                return Err(SimulationError::SessionClosed);
+            }
             guard.provider.clone()
         };
         let pending = provider
@@ -43,7 +47,14 @@ impl SimulationSession for Mutex<AnvilSession> {
     }
 
     async fn close(&self) {
-        let _ = self.lock().await;
+        let mut guard = self.lock().await;
+        if guard.closed {
+            return;
+        }
+        guard.closed = true;
+        if let Some(anvil) = guard.anvil.take() {
+            drop(anvil);
+        }
     }
 }
 
@@ -66,9 +77,10 @@ impl SimulationProvider for AnvilProvider {
         Ok(Mutex::new(AnvilSession {
             id: Uuid::new_v4(),
             provider,
-            _anvil: anvil,
+            anvil: Some(anvil),
             created: Instant::now(),
             timeout,
+            closed: false,
         }))
     }
 }
