@@ -18,6 +18,10 @@ pub enum SimulationError {
     /// Erro ao aguardar resultado da transação
     #[error("falha ao aguardar transação: {0}")]
     AwaitTransaction(String),
+
+    /// Operação realizada após o encerramento da sessão
+    #[error("sessao ja encerrada")]
+    SessionClosed,
 }
 
 /// Resultado padrão da crate

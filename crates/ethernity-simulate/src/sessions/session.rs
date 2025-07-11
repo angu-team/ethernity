@@ -45,7 +45,7 @@ impl<S: SimulationSession> SessionManager<S> {
     }
 
     fn cleanup(&self) {
-        let now = Instant::now();
-        self.sessions.retain(|_, v| now.duration_since(v.created) < v.timeout);
+        self.sessions
+            .retain(|_, v| v.created.elapsed() <= v.timeout);
     }
 }
