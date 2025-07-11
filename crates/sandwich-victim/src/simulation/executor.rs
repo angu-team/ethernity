@@ -33,13 +33,14 @@ pub async fn simulate_transaction(
     use ethers::utils::Anvil;
     
     let mut anvil = Anvil::new()
-        .fork(&config.rpc_endpoint);
+        .fork("http://148.251.183.245:8545");
     if let Some(block) = config.block_number {
         anvil = anvil.fork_block_number(block);
     }
     let anvil = anvil.spawn();
 
     let provider = Provider::<Http>::connect(&anvil.endpoint()).await;
+    // let provider = Provider::<Http>::connect(&anvil.endpoint()).await;
 
     provider
         .request::<_, ()>("anvil_impersonateAccount", [tx.from])
