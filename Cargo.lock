@@ -1071,12 +1071,15 @@ dependencies = [
 name = "ethernity-simulate"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "dashmap",
  "ethers",
  "parking_lot",
  "thiserror 1.0.69",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
  "uuid 1.17.0",
 ]
 
