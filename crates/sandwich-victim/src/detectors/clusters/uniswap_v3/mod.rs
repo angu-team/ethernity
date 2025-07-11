@@ -1,5 +1,5 @@
 use crate::dex::{detect_swap_function, RouterInfo, SwapFunction};
-use crate::simulation::SimulationOutcome;
+use crate::tx_logs::TxLogs;
 use crate::types::{AnalysisResult, Metrics, TransactionData};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -22,7 +22,7 @@ impl crate::detectors::VictimDetector for UniswapV3Detector {
         _rpc_endpoint: String,
         tx: TransactionData,
         _block: Option<u64>,
-        _outcome: SimulationOutcome,
+        _outcome: TxLogs,
         _router: RouterInfo,
     ) -> Result<AnalysisResult> {
         let (func, f) = detect_swap_function(&tx.data).ok_or(anyhow!("unrecognized swap"))?;

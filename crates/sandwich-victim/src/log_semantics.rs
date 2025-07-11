@@ -1,8 +1,8 @@
-use ethers::abi::{AbiParser, Event, RawLog, Token, EventExt};
+use ethers::abi::{AbiParser, Event, EventExt, RawLog, Token};
 use ethers::types::{Address, Log, H256};
+use ethers::utils::keccak256;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
-use ethers::utils::keccak256;
 
 #[derive(Debug, Clone)]
 pub struct MappedLog {
@@ -31,8 +31,7 @@ static EVENT_MAP: Lazy<HashMap<H256, Event>> = Lazy::new(build_event_map);
 
 /// Decodes logs using known event signatures
 pub fn map_logs(logs: &[Log]) -> Vec<MappedLog> {
-    logs
-        .iter()
+    logs.iter()
         .filter_map(|log| {
             let topic0 = log.topics.get(0)?;
             let event = EVENT_MAP.get(topic0)?;
@@ -55,4 +54,3 @@ pub fn map_logs(logs: &[Log]) -> Vec<MappedLog> {
         })
         .collect()
 }
-

@@ -1,9 +1,9 @@
 use crate::detectors::clusters::uniswap_v2::analyze_uniswap_v2;
 
 pub mod custom;
-use crate::dex::{detect_swap_function, RouterInfo};
 use super::oneinch_aggregation_router_v6::AGGREGATION_ROUTER_V6_ADDRESSES;
-use crate::simulation::SimulationOutcome;
+use crate::dex::{detect_swap_function, RouterInfo};
+use crate::tx_logs::TxLogs;
 use crate::types::{AnalysisResult, TransactionData};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -26,10 +26,10 @@ impl crate::detectors::VictimDetector for MulticallBytesDetector {
         rpc_endpoint: String,
         tx: TransactionData,
         block: Option<u64>,
-        _outcome: SimulationOutcome,
+        outcome: TxLogs,
         router: RouterInfo,
     ) -> Result<AnalysisResult> {
-        analyze_multicall_bytes(rpc_client, rpc_endpoint, tx, block, router).await
+        analyze_multicall_bytes(rpc_client, rpc_endpoint, tx, outcome, block, router).await
     }
 }
 
@@ -37,6 +37,7 @@ pub async fn analyze_multicall_bytes(
     rpc_client: Arc<dyn RpcProvider>,
     rpc_endpoint: String,
     tx: TransactionData,
+    outcome: TxLogs,
     block: Option<u64>,
     router: RouterInfo,
 ) -> Result<AnalysisResult> {
@@ -55,7 +56,10 @@ pub async fn analyze_multicall_bytes(
         .ok_or_else(|| anyhow!("invalid array"))?;
     let mut calls: Vec<Vec<u8>> = Vec::with_capacity(arr.len());
     for t in arr {
-        calls.push(t.into_bytes().ok_or_else(|| anyhow!("invalid inner calldata"))?);
+        calls.push(
+            t.into_bytes()
+                .ok_or_else(|| anyhow!("invalid inner calldata"))?,
+        );
     }
 
     let mut last_err = None;
@@ -68,6 +72,7 @@ pub async fn analyze_multicall_bytes(
                 rpc_client.clone(),
                 rpc_endpoint.clone(),
                 inner,
+                outcome.logs.clone(),
                 block,
                 router.clone(),
             )

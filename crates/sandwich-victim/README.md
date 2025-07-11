@@ -1,22 +1,22 @@
 # sandwich-victim
 
-Biblioteca para detectar oportunidades de ataque *sandwich* em transações Ethereum. A análise executa a transação em um fork local da blockchain usando `anvil` e calcula:
+Biblioteca para detectar oportunidades de ataque *sandwich* em transações Ethereum. A análise trabalha exclusivamente com logs fornecidos como entrada e calcula:
 
 - rota dos tokens trocados
 - slippage real comparado com a cotação esperada
 - quantidade mínima de tokens capaz de afetar o preço
 - lucro potencial de uma estratégia de front‑run e back‑run
-- identificação dinâmica do router envolvido (extraído exclusivamente dos logs da simulação)
+- identificação dinâmica do router envolvido (extraído exclusivamente dos logs de execução)
 - reconhecimento de todas as variações de funções de swap V2
 - suporte ao Uniswap V3 SmartRouter com decodificação de multicalls
 
-O endpoint RPC utilizado na simulação pode ser HTTP ou WebSocket. URLs `ws://`
-ou `wss://` serão convertidas para o esquema correspondente automaticamente.
+O endpoint RPC utilizado pode ser HTTP ou WebSocket. URLs `ws://` ou `wss://`
+serão convertidas para o esquema correspondente automaticamente.
 
 A arquitetura segue o princípio de responsabilidade única. Cada módulo possui
 uma função clara:
 `core` contém o analisador de transações e cálculo de métricas,
-`simulation` gerencia sessões reutilizáveis do Anvil,
+`tx_logs` define o tipo de entrada contendo os logs a serem analisados,
 `dex` provê decodificação e consultas on-chain,
 `client` abstrai chamadas RPC com cache simples e
 `types` define as estruturas de dados. Assim o código fica organizado e fácil de manter.
@@ -28,5 +28,5 @@ O código expõe funções assíncronas e pode ser extendido com novos métodos 
 
 
 Consulte o diretório [examples](./examples/) para um exemplo de uso via linha de
-comando. O utilitário recebe um hash de transação e busca os dados em um node
-RPC executando a simulação automaticamente com o `anvil`.
+comando. O utilitário recebe um hash de transação, obtém seus logs em um node
+RPC e executa a análise de forma determinística.

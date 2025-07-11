@@ -1,13 +1,14 @@
 /*! Sandwich Victim
  *
  * Crate para detectar oportunidades de ataque do tipo sandwich em transações
- * Ethereum. Utiliza simulação local para estimar métricas de viabilidade.
+ * Ethereum. A análise trabalha apenas com logs recebidos como entrada,
+ * sem realizar qualquer simulação local.
  */
 
-pub mod types;
-pub mod simulation;
-pub mod dex;
 pub mod core;
+pub mod detectors;
+pub mod dex;
 pub mod filters;
 pub mod log_semantics;
-pub mod detectors;
+pub mod tx_logs;
+pub mod types;
