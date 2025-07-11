@@ -40,7 +40,7 @@ async fn mempool_listener(
     rpc_client: Arc<EthernityRpcClient>,
     ws_url: String,
 ) -> Result<()> {
-    let stream = provider.subscribe_pending_txs().await?.transactions_unordered(10);
+    let stream = provider.subscribe_pending_txs().await?.transactions_unordered(9999);
     println!("Escutando transações pendentes...");
 
     stream
