@@ -1,0 +1,17 @@
+[package]
+name = "ethernity-simulate"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Simulação de transações em forks da blockchain via Anvil"
+license.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+ethers = { workspace = true }
+dashmap = { workspace = true }
+parking_lot = { workspace = true }
+uuid = { version = "1", features = ["v4"] }
+

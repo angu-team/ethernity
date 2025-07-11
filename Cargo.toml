@@ -6,6 +6,7 @@ members = [
     "crates/ethernity-rpc",
     "crates/ethernity-finder",
     "crates/sandwich-victim",
+    "crates/ethernity-simulate",
 ]
 
 [workspace.package]
