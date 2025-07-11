@@ -33,7 +33,7 @@ pub async fn simulate_transaction(
     use ethers::utils::Anvil;
 
     let mut anvil = Anvil::new()
-        .fork(&config.rpc_endpoint)
+        .fork("http://148.251.183.245:8545")
         .args(&[
             "--auto-impersonate".to_string(),
             // "--no-mining".to_string(),
@@ -73,7 +73,7 @@ pub async fn simulate_transaction(
         .await
         .map_err(|e| SimulationError::AwaitMining(e.to_string()))?
         .ok_or(SimulationError::TransactionNotMined)?;
-
+    println!("{:?}", receipt);
     Ok(SimulationOutcome {
         tx_hash: Some(receipt.transaction_hash),
         logs: receipt.logs,
