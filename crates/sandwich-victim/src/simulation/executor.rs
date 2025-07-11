@@ -33,7 +33,7 @@ pub async fn simulate_transaction(
     use ethers::utils::Anvil;
     
     let mut anvil = Anvil::new()
-        .fork("http://148.251.183.245:8545");
+        .fork(&config.rpc_endpoint);
     if let Some(block) = config.block_number {
         anvil = anvil.fork_block_number(block);
     }
