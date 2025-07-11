@@ -73,7 +73,7 @@ pub async fn simulate_transaction(
         .await
         .map_err(|e| SimulationError::AwaitMining(e.to_string()))?
         .ok_or(SimulationError::TransactionNotMined)?;
-    println!("{:?}", receipt);
+    
     Ok(SimulationOutcome {
         tx_hash: Some(receipt.transaction_hash),
         logs: receipt.logs,
