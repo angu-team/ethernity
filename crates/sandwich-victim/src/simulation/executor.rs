@@ -31,25 +31,20 @@ pub async fn simulate_transaction(
     tx: &TransactionData,
 ) -> Result<SimulationOutcome> {
     use ethers::utils::Anvil;
-
+    
     let mut anvil = Anvil::new()
-        .fork(&config.rpc_endpoint)
-        .args(&[
-            "--auto-impersonate".to_string(),
-            "--no-mining".to_string(),
-            "--gas-price=0".to_string(),
-            "--base-fee=0".to_string(),
-            "--gas-limit=30000000".to_string(),      // Limite de gás fixo e alto
-
-        ]) // Define o limite de gás
-        // .path("/home/moinho/.foundry/bin/anvil"); // Caminho para o binário do Anvil
-        .path("/root/.foundry/bin/anvil");
+        .fork(&config.rpc_endpoint);
     if let Some(block) = config.block_number {
         anvil = anvil.fork_block_number(block);
     }
     let anvil = anvil.spawn();
 
     let provider = Provider::<Http>::connect(&anvil.endpoint()).await;
+
+    provider
+        .request::<_, ()>("anvil_impersonateAccount", [tx.from])
+        .await
+        .map_err(|e| SimulationError::ImpersonateAccount(e.to_string()))?;
 
     let tx_request = TransactionRequest::new()
         .from(tx.from)
