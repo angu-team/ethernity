@@ -925,7 +925,7 @@ dependencies = [
  "sha2",
  "sha3",
  "thiserror 1.0.69",
- "uuid",
+ "uuid 0.8.2",
 ]
 
 [[package]]
@@ -1065,6 +1065,19 @@ dependencies = [
  "tracing-subscriber",
  "web3",
  "wiremock",
+]
+
+[[package]]
+name = "ethernity-simulate"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "dashmap",
+ "ethers",
+ "parking_lot",
+ "thiserror 1.0.69",
+ "tokio",
+ "uuid 1.17.0",
 ]
 
 [[package]]
@@ -4399,6 +4412,17 @@ checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
 dependencies = [
  "getrandom 0.2.16",
  "serde",
+]
+
+[[package]]
+name = "uuid"
+version = "1.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3cf4199d1e5d15ddd86a694e4d0dffa9c323ce759fea589f00fef9d81cc1931d"
+dependencies = [
+ "getrandom 0.3.3",
+ "js-sys",
+ "wasm-bindgen",
 ]
 
 [[package]]
