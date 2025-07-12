@@ -8,3 +8,5 @@ Principais funcionalidades:
 - Criação de sessões de fork baseadas em um RPC remoto e bloco específico.
 - Envio de transações simuladas e obtenção do `TransactionReceipt`.
 - Encerramento manual das sessões e limpeza automática por timeout.
+- Inicialização do `anvil` com o argumento `--auto-impersonate`.
+- Possibilidade de definir opcionalmente o bloco inicial do fork.
