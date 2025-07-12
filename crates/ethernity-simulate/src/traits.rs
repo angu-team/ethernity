@@ -18,5 +18,5 @@ pub trait SimulationProvider: Send + Sync {
     type Session: SimulationSession;
 
     /// Cria uma nova sessão de simulação
-    async fn create_session(&self, rpc_url: &str, block_number: u64, timeout: Duration) -> Result<Self::Session>;
+    async fn create_session(&self, rpc_url: &str, block_number: Option<u64>, timeout: Duration) -> Result<Self::Session>;
 }
