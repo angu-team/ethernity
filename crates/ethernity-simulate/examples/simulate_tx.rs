@@ -88,12 +88,13 @@ async fn main() -> Result<()> {
 
     let block = tx.block_number.context("transacao pendente")?;
     info!("Transacao localizada no bloco {}", block);
+    let fork_block = block.as_u64().saturating_sub(1);
 
     let start = Instant::now();
 
     let sim_provider = AnvilProvider;
     let session = sim_provider
-        .create_session(rpc, Some(block.as_u64()), Duration::from_secs(60))
+        .create_session(rpc, Some(fork_block), Duration::from_secs(60))
         .await
         .context("falha ao criar sessao")?;
     let id = { session.lock().await.id };
