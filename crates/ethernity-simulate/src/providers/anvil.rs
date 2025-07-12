@@ -64,11 +64,14 @@ pub struct AnvilProvider;
 impl SimulationProvider for AnvilProvider {
     type Session = Mutex<AnvilSession>;
 
-    async fn create_session(&self, rpc_url: &str, block_number: u64, timeout: Duration) -> Result<Self::Session> {
-        let anvil = Anvil::new()
+    async fn create_session(&self, rpc_url: &str, block_number: Option<u64>, timeout: Duration) -> Result<Self::Session> {
+        let mut anvil = Anvil::new()
             .fork(rpc_url)
-            .fork_block_number(block_number)
-            .spawn();
+            .args(&["--auto-impersonate".to_string()]);
+        if let Some(block) = block_number {
+            anvil = anvil.fork_block_number(block);
+        }
+        let anvil = anvil.spawn();
 
         let provider = Provider::<Http>::try_from(anvil.endpoint())
             .map_err(|e| SimulationError::ProviderCreation(e.to_string()))?
