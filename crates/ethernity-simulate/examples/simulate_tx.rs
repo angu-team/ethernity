@@ -93,7 +93,7 @@ async fn main() -> Result<()> {
 
     let sim_provider = AnvilProvider;
     let session = sim_provider
-        .create_session(rpc, block.as_u64(), Duration::from_secs(60))
+        .create_session(rpc, Some(block.as_u64()), Duration::from_secs(60))
         .await
         .context("falha ao criar sessao")?;
     let id = { session.lock().await.id };
