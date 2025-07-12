@@ -109,7 +109,7 @@ where
 
     let anvil = Anvil::new()
         .fork(rpc)
-        .fork_block_number(block.as_u64())
+        .fork_block_number(block.as_u64().saturating_sub(1))
         .args(&["--auto-impersonate".to_string()])
         .spawn();
 
