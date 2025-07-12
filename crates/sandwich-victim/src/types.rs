@@ -1,5 +1,5 @@
-use ethereum_types::{Address, U256, H256};
 use crate::dex::SwapFunction;
+use ethereum_types::{Address, H256, U256};
 use serde::{Deserialize, Serialize};
 
 /// Dados básicos de uma transação Ethereum

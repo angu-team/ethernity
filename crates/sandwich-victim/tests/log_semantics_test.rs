@@ -1,7 +1,7 @@
-use sandwich_victim::log_semantics::map_logs;
-use ethers::abi::{AbiParser, Token, EventExt, encode};
-use ethers::types::{Address, Log, Bytes, H256};
+use ethers::abi::{encode, AbiParser, EventExt, Token};
+use ethers::types::{Address, Bytes, Log, H256};
 use ethers::utils::keccak256;
+use sandwich_victim::log_semantics::map_logs;
 
 #[test]
 fn decode_uniswap_v3_swap() {
@@ -29,4 +29,3 @@ fn decode_uniswap_v3_swap() {
     assert_eq!(mapped[0].event, "Swap");
     assert_eq!(mapped[0].params.len(), 9);
 }
-

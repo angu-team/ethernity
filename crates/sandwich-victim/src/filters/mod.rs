@@ -1,4 +1,4 @@
-use crate::simulation::SimulationOutcome;
+use crate::tx_logs::TxLogs;
 use ethers::types::H256;
 use std::str::FromStr;
 
@@ -7,7 +7,7 @@ pub trait Filter: Send + Sync {
     /// Aplica o filtro ao resultado.
     /// Retorna `Some` quando a simulação deve continuar no pipeline
     /// ou `None` para descartar.
-    fn apply(&self, outcome: SimulationOutcome) -> Option<SimulationOutcome>;
+    fn apply(&self, outcome: TxLogs) -> Option<TxLogs>;
 }
 
 /// Pipeline de filtros a serem executados sequencialmente
@@ -19,7 +19,9 @@ pub struct FilterPipeline {
 impl FilterPipeline {
     /// Cria pipeline vazio
     pub fn new() -> Self {
-        Self { filters: Vec::new() }
+        Self {
+            filters: Vec::new(),
+        }
     }
 
     /// Adiciona um filtro ao pipeline
@@ -29,7 +31,7 @@ impl FilterPipeline {
     }
 
     /// Executa os filtros em sequência retornando o resultado final
-    pub fn run(&self, mut outcome: SimulationOutcome) -> Option<SimulationOutcome> {
+    pub fn run(&self, mut outcome: TxLogs) -> Option<TxLogs> {
         for f in &self.filters {
             match f.apply(outcome) {
                 Some(out) => outcome = out,
@@ -46,9 +48,13 @@ pub struct SwapLogFilter;
 const SWAP_TOPIC: &str = "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822";
 
 impl Filter for SwapLogFilter {
-    fn apply(&self, outcome: SimulationOutcome) -> Option<SimulationOutcome> {
+    fn apply(&self, outcome: TxLogs) -> Option<TxLogs> {
         let topic = H256::from_str(SWAP_TOPIC).expect("valid topic hex");
-        if outcome.logs.iter().any(|log| log.topics.get(0) == Some(&topic)) {
+        if outcome
+            .logs
+            .iter()
+            .any(|log| log.topics.get(0) == Some(&topic))
+        {
             Some(outcome)
         } else {
             None
@@ -61,7 +67,7 @@ mod tests {
     use super::*;
     use ethers::types::{Address, Bytes, Log};
 
-    fn outcome_with_topics(topics: Vec<H256>) -> SimulationOutcome {
+    fn outcome_with_topics(topics: Vec<H256>) -> TxLogs {
         let log = Log {
             address: Address::zero(),
             topics,
@@ -75,7 +81,10 @@ mod tests {
             log_type: None,
             removed: None,
         };
-        SimulationOutcome { tx_hash: None, logs: vec![log] }
+        TxLogs {
+            tx_hash: None,
+            logs: vec![log],
+        }
     }
 
     #[test]
@@ -92,4 +101,3 @@ mod tests {
         assert!(pipeline.run(outcome).is_none());
     }
 }
-

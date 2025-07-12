@@ -1,6 +1,6 @@
-use crate::detectors::clusters::uniswap_v2::analyze_uniswap_v2_with_outcome;
+use crate::detectors::clusters::uniswap_v2::analyze_uniswap_v2_with_logs;
 use crate::dex::RouterInfo;
-use crate::simulation::SimulationOutcome;
+use crate::tx_logs::TxLogs;
 use crate::types::{AnalysisResult, TransactionData};
 use anyhow::Result;
 use async_trait::async_trait;
@@ -29,7 +29,7 @@ impl crate::detectors::VictimDetector for OneInchGenericRouterDetector {
         rpc_endpoint: String,
         tx: TransactionData,
         block: Option<u64>,
-        outcome: SimulationOutcome,
+        outcome: TxLogs,
         router: RouterInfo,
     ) -> Result<AnalysisResult> {
         analyze_oneinch_generic_router(rpc_client, rpc_endpoint, tx, block, outcome, router).await
@@ -41,8 +41,8 @@ pub async fn analyze_oneinch_generic_router(
     rpc_endpoint: String,
     tx: TransactionData,
     block: Option<u64>,
-    outcome: SimulationOutcome,
+    outcome: TxLogs,
     router: RouterInfo,
 ) -> Result<AnalysisResult> {
-    analyze_uniswap_v2_with_outcome(rpc_client, rpc_endpoint, tx, block, outcome, router).await
+    analyze_uniswap_v2_with_logs(rpc_client, rpc_endpoint, tx, block, outcome, router).await
 }

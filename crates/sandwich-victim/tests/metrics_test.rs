@@ -1,5 +1,5 @@
-use sandwich_victim::core::metrics::constant_product_input;
 use ethereum_types::U256;
+use sandwich_victim::core::metrics::constant_product_input;
 
 #[test]
 fn constant_product_input_invalid_output() {

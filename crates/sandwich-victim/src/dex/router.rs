@@ -1,10 +1,10 @@
+use anyhow::anyhow;
 use anyhow::Result;
-use ethereum_types::{Address, U256, H256};
+use ethereum_types::{Address, H256, U256};
+use ethernity_core::traits::RpcProvider;
 use ethers::abi::{AbiParser, Token};
 use ethers::types::Log;
 use ethers::utils::keccak256;
-use ethernity_core::traits::RpcProvider;
-use anyhow::anyhow;
 
 /// Informações sobre o router detectado
 #[derive(Debug, Clone)]
@@ -23,10 +23,9 @@ where
     let name = None;
 
     // tenta obter a factory para confirmar ser um router
-    let factory_abi = AbiParser::default()
-        .parse_function("factory() view returns (address)")?;
+    let factory_abi = AbiParser::default().parse_function("factory() view returns (address)")?;
     let call_res = provider
-        .call(addr, factory_abi.encode_input(&[])? .into())
+        .call(addr, factory_abi.encode_input(&[])?.into())
         .await;
     let factory = match call_res {
         Ok(out) => {
@@ -37,8 +36,8 @@ where
     };
 
     // verifica se responde a getAmountsOut
-    let amounts_out_abi = AbiParser::default()
-        .parse_function("getAmountsOut(uint256,address[])")?;
+    let amounts_out_abi =
+        AbiParser::default().parse_function("getAmountsOut(uint256,address[])")?;
     let test_data = amounts_out_abi.encode_input(&[
         Token::Uint(U256::one()),
         Token::Array(vec![Token::Address(addr), Token::Address(addr)]),
@@ -73,7 +72,7 @@ pub fn router_from_logs(logs: &[Log]) -> Option<Address> {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use ethernity_core::error::{Result as CoreResult, Error};
+    use ethernity_core::error::{Error, Result as CoreResult};
     use ethernity_core::traits::RpcProvider;
     use ethernity_core::types::TransactionHash;
 
@@ -125,7 +124,10 @@ mod tests {
         let swap_sig = H256::from_slice(
             keccak256("Swap(address,uint256,uint256,uint256,uint256,address)").as_slice(),
         );
-        let log = Log { topics: vec![swap_sig, router.into()], ..Default::default() };
+        let log = Log {
+            topics: vec![swap_sig, router.into()],
+            ..Default::default()
+        };
 
         assert_eq!(router_from_logs(&[log]), Some(router));
     }
@@ -139,7 +141,9 @@ mod tests {
     #[tokio::test]
     async fn identify_router_returns_factory() {
         let factory = Address::from_low_u64_be(1);
-        let provider = DummyProvider { factory: Some(factory) };
+        let provider = DummyProvider {
+            factory: Some(factory),
+        };
         let router = Address::from_low_u64_be(2);
 
         let info = identify_router(&provider, router).await.unwrap();
@@ -164,7 +168,10 @@ mod tests {
         let swap_sig = H256::from_slice(
             keccak256("Swap(address,uint256,uint256,uint256,uint256,address)").as_slice(),
         );
-        let swap_log = Log { topics: vec![swap_sig, router.into()], ..Default::default() };
+        let swap_log = Log {
+            topics: vec![swap_sig, router.into()],
+            ..Default::default()
+        };
 
         assert_eq!(router_from_logs(&[other_log, swap_log]), Some(router));
     }

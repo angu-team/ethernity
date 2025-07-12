@@ -2,7 +2,7 @@ use crate::core::metrics::{constant_product_input, constant_product_output, U256
 use crate::dex::query::get_pair_tokens;
 use crate::dex::{RouterInfo, SwapFunction};
 use crate::filters::{FilterPipeline, SwapLogFilter};
-use crate::simulation::SimulationOutcome;
+use crate::tx_logs::TxLogs;
 use crate::types::{AnalysisResult, Metrics, TransactionData};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -48,7 +48,7 @@ static UNIVERSAL_ROUTER_ADDRESSES: Lazy<HashSet<Address>> = Lazy::new(|| {
         "0xef1c6e67703c7bd7107eed8303fbe6ec2554bf6b",
         // BSC mainnet Universal Router
         "0xd9c500dff816a1da21a48a732d3498bf09dc9aeb",
-        "0x8A0f488D97061320E87e5ac9A27847014c7ab00b"
+        "0x8A0f488D97061320E87e5ac9A27847014c7ab00b",
     ]
     .into_iter()
     .map(|s| Address::from_str(s).expect("valid address"))
@@ -67,7 +67,7 @@ impl crate::detectors::VictimDetector for UniswapUniversalRouterDetector {
         rpc_endpoint: String,
         tx: TransactionData,
         block: Option<u64>,
-        outcome: SimulationOutcome,
+        outcome: TxLogs,
         _router: RouterInfo,
     ) -> Result<AnalysisResult> {
         analyze_universal_router(rpc_client, rpc_endpoint, tx, outcome, block).await
@@ -78,7 +78,7 @@ pub async fn analyze_universal_router(
     rpc_client: Arc<dyn RpcProvider>,
     rpc_endpoint: String,
     tx: TransactionData,
-    outcome: SimulationOutcome,
+    outcome: TxLogs,
     block: Option<u64>,
 ) -> Result<AnalysisResult> {
     let provider =

@@ -1,6 +1,6 @@
 use crate::detectors::clusters::uniswap_v2::analyze_uniswap_v2;
 use crate::dex::{detect_swap_function, RouterInfo};
-use crate::simulation::SimulationOutcome;
+use crate::tx_logs::TxLogs;
 use crate::types::{AnalysisResult, TransactionData};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -22,10 +22,10 @@ impl crate::detectors::VictimDetector for SmartRouterUniswapV3Detector {
         rpc_endpoint: String,
         tx: TransactionData,
         block: Option<u64>,
-        _outcome: SimulationOutcome,
+        outcome: TxLogs,
         router: RouterInfo,
     ) -> Result<AnalysisResult> {
-        analyze_uniswap_v3(rpc_client, rpc_endpoint, tx, block, router).await
+        analyze_uniswap_v3(rpc_client, rpc_endpoint, tx, outcome, block, router).await
     }
 }
 
@@ -33,6 +33,7 @@ pub async fn analyze_uniswap_v3(
     rpc_client: Arc<dyn RpcProvider>,
     rpc_endpoint: String,
     tx: TransactionData,
+    outcome: TxLogs,
     block: Option<u64>,
     router: RouterInfo,
 ) -> Result<AnalysisResult> {
@@ -56,7 +57,15 @@ pub async fn analyze_uniswap_v3(
             let mut inner = tx.clone();
             inner.data = call;
             inner.to = router.address;
-            return analyze_uniswap_v2(rpc_client, rpc_endpoint, inner, block, router.clone()).await;
+            return analyze_uniswap_v2(
+                rpc_client,
+                rpc_endpoint,
+                inner,
+                outcome.logs.clone(),
+                block,
+                router.clone(),
+            )
+            .await;
         }
     }
 

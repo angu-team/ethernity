@@ -1,6 +1,6 @@
 use crate::detectors::clusters::uniswap_v2::analyze_uniswap_v2;
 use crate::dex::{detect_swap_function, RouterInfo};
-use crate::simulation::SimulationOutcome;
+use crate::tx_logs::TxLogs;
 use crate::types::{AnalysisResult, TransactionData};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -21,7 +21,7 @@ impl crate::detectors::VictimDetector for SwapV2ExactInDetector {
         rpc_endpoint: String,
         tx: TransactionData,
         block: Option<u64>,
-        _outcome: SimulationOutcome,
+        outcome: TxLogs,
         router: RouterInfo,
     ) -> Result<AnalysisResult> {
         let (kind, _) = detect_swap_function(&tx.data).ok_or(anyhow!("unrecognized swap"))?;
@@ -32,6 +32,6 @@ impl crate::detectors::VictimDetector for SwapV2ExactInDetector {
             return Err(anyhow!("unsupported swap"));
         }
 
-        analyze_uniswap_v2(rpc_client, rpc_endpoint, tx, block, router).await
+        analyze_uniswap_v2(rpc_client, rpc_endpoint, tx, outcome.logs, block, router).await
     }
 }

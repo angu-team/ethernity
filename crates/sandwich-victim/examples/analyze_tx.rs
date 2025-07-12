@@ -9,19 +9,23 @@
 use std::env;
 use std::time::Duration;
 
+use anyhow::anyhow;
+use ethernity_rpc::{EthernityRpcClient, RpcConfig};
+use ethers::prelude::*;
+use ethers::types::H256;
 use sandwich_victim::core::analyze_transaction;
 use sandwich_victim::types::TransactionData;
-use ethers::prelude::*;
-use ethernity_rpc::{EthernityRpcClient, RpcConfig};
 use std::sync::Arc;
-use anyhow::anyhow;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
         eprintln!("Uso: {} <RPC_ENDPOINT> <TX_HASH>", args[0]);
-        eprintln!("Exemplo: {} https://mainnet.infura.io/v3/YOURKEY 0x...", args[0]);
+        eprintln!(
+            "Exemplo: {} https://mainnet.infura.io/v3/YOURKEY 0x...",
+            args[0]
+        );
         std::process::exit(1);
     }
 
@@ -34,7 +38,9 @@ async fn main() -> anyhow::Result<()> {
         .await?
         .ok_or_else(|| anyhow!("transação não encontrada"))?;
 
-    let to = fetched.to.ok_or_else(|| anyhow!("transação sem destinatário"))?;
+    let to = fetched
+        .to
+        .ok_or_else(|| anyhow!("transação sem destinatário"))?;
 
     let tx = TransactionData {
         from: fetched.from,
@@ -46,16 +52,24 @@ async fn main() -> anyhow::Result<()> {
         nonce: fetched.nonce,
     };
 
-    let rpc_client = Arc::new(EthernityRpcClient::new(RpcConfig {
-        endpoint: rpc.clone(),
-        ..Default::default()
-    })
-    .await?);
+    let rpc_client = Arc::new(
+        EthernityRpcClient::new(RpcConfig {
+            endpoint: rpc.clone(),
+            ..Default::default()
+        })
+        .await?,
+    );
+
+    let receipt = provider
+        .get_transaction_receipt(tx_hash)
+        .await?
+        .ok_or_else(|| anyhow!("receipt não encontrado"))?;
 
     let result = analyze_transaction(
         rpc_client,
         rpc,
         tx,
+        receipt.logs,
         fetched.block_number.map(|b| b.as_u64() - 1),
     )
     .await?;

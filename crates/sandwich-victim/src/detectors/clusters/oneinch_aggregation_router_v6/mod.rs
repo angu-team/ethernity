@@ -1,5 +1,5 @@
 use crate::dex::{detect_swap_function, RouterInfo, SwapFunction};
-use crate::simulation::SimulationOutcome;
+use crate::tx_logs::TxLogs;
 use crate::types::{AnalysisResult, Metrics, TransactionData};
 use anyhow::Result;
 use async_trait::async_trait;
@@ -37,7 +37,7 @@ impl crate::detectors::VictimDetector for OneInchAggregationRouterV6Detector {
         rpc_endpoint: String,
         tx: TransactionData,
         block: Option<u64>,
-        outcome: SimulationOutcome,
+        outcome: TxLogs,
         router: RouterInfo,
     ) -> Result<AnalysisResult> {
         analyze_oneinch_aggregation_router_v6(rpc_client, rpc_endpoint, tx, block, outcome, router)
@@ -68,7 +68,7 @@ pub async fn analyze_oneinch_aggregation_router_v6(
     _rpc_endpoint: String,
     tx: TransactionData,
     _block: Option<u64>,
-    outcome: SimulationOutcome,
+    outcome: TxLogs,
     router: RouterInfo,
 ) -> Result<AnalysisResult> {
     if tx.data.len() < 4 || !SWAP_SELECTORS.iter().any(|s| tx.data[..4] == s[..]) {
@@ -83,8 +83,8 @@ pub async fn analyze_oneinch_aggregation_router_v6(
             .unwrap(),
     ));
 
-    use ethers::utils::keccak256;
     use ethers::types::H256;
+    use ethers::utils::keccak256;
 
     let transfer_sig: H256 =
         H256::from_slice(keccak256("Transfer(address,address,uint256)").as_slice());
