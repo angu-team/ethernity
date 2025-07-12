@@ -25,5 +25,4 @@ Simula uma transação existente e, após a execução, realiza um `debug_traceT
 cargo run --example simulate_tx_trace -- <RPC_ENDPOINT> <TX_HASH>
 ```
 
-=======
 Substitua `<RPC_WS_ENDPOINT>` pelo endereço RPC desejado (por exemplo, wss://mainnet.infura.io/ws/v3/YOUR_KEY). O `anvil` é iniciado com `--auto-impersonate` e o bloco inicial pode ser ajustado diretamente no exemplo.

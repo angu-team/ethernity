@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use ethers::prelude::*;
+use ethers::providers::JsonRpcClient;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use ethers::utils::Anvil;
 use tracing::info;
@@ -67,16 +68,28 @@ async fn main() -> Result<()> {
     let rpc = &args[1];
     let tx_hash: H256 = args[2].parse().context("hash invalido")?;
 
-    // Conecta ao RPC (HTTP ou WS)
-    let provider = if rpc.starts_with("ws") {
+    if rpc.starts_with("ws") {
         let ws = Ws::connect(rpc)
             .await
             .context("falha ao conectar via websocket")?;
-        Provider::new(ws)
+        let provider = Provider::new(ws).interval(Duration::from_millis(1));
+        simulate(provider, rpc, tx_hash).await
     } else {
-        Provider::<Http>::try_from(rpc).context("falha ao conectar via http")?
-    };
+        let http = Provider::<Http>::try_from(rpc)
+            .context("falha ao conectar via http")?
+            .interval(Duration::from_millis(1));
+        simulate(http, rpc, tx_hash).await
+    }
+}
 
+async fn simulate<P>(
+    provider: Provider<P>,
+    rpc: &str,
+    tx_hash: H256,
+) -> Result<()>
+where
+    P: JsonRpcClient + 'static,
+{
     let tx = provider
         .get_transaction(tx_hash)
         .await
@@ -86,7 +99,6 @@ async fn main() -> Result<()> {
     let block = tx.block_number.context("transacao pendente")?;
     info!("Transacao localizada no bloco {}", block);
 
-    // Opcionalmente recupera o bloco para garantir fidelidade
     provider
         .get_block(block)
         .await
@@ -95,7 +107,6 @@ async fn main() -> Result<()> {
 
     let start = Instant::now();
 
-    // Cria o fork exatamente no bloco original
     let anvil = Anvil::new()
         .fork(rpc)
         .fork_block_number(block.as_u64())
@@ -117,7 +128,6 @@ async fn main() -> Result<()> {
         .context("sem recibo")?;
     info!("Transacao simulada: {:?}", receipt.transaction_hash);
 
-    // Realiza o trace detalhado
     let params = [
         serde_json::to_value(receipt.transaction_hash)?,
         serde_json::json!({"tracer": "callTracer", "timeout": "60s"}),
