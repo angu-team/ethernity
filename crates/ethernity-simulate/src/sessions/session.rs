@@ -1,9 +1,9 @@
-use std::time::{Duration, Instant};
-use uuid::Uuid;
 use dashmap::DashMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+use uuid::Uuid;
 
-use crate::traits::SimulationSession;
+use crate::{logger::log_warn, traits::SimulationSession};
 
 /// Estrutura interna de controle de sessão
 pub struct SessionEntry<S: SimulationSession> {
@@ -26,12 +26,22 @@ pub struct SessionManager<S: SimulationSession> {
 
 impl<S: SimulationSession> SessionManager<S> {
     pub fn new() -> Self {
-        Self { sessions: DashMap::new() }
+        Self {
+            sessions: DashMap::new(),
+        }
     }
 
     pub fn insert(&self, session: Arc<S>, timeout: Duration) -> Uuid {
         let id = Uuid::new_v4();
-        self.sessions.insert(id, SessionEntry { id, session, created: Instant::now(), timeout });
+        self.sessions.insert(
+            id,
+            SessionEntry {
+                id,
+                session,
+                created: Instant::now(),
+                timeout,
+            },
+        );
         id
     }
 
@@ -45,7 +55,15 @@ impl<S: SimulationSession> SessionManager<S> {
     }
 
     fn cleanup(&self) {
+        let before = self.sessions.len();
         self.sessions
             .retain(|_, v| v.created.elapsed() <= v.timeout);
+        let removed = before.saturating_sub(self.sessions.len());
+        if removed > 0 {
+            let msg = format!("{} sessoes expiradas removidas", removed);
+            tokio::spawn(async move {
+                log_warn(&msg).await;
+            });
+        }
     }
 }

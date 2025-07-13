@@ -14,6 +14,8 @@ ethers = { workspace = true }
 dashmap = { workspace = true }
 parking_lot = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
+ethernity-logs = { path = "../ethernity-logs" }
+once_cell = "1"
 
 [dev-dependencies]
 anyhow = "1"
