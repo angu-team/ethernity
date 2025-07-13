@@ -45,6 +45,11 @@ O Ethernity é um workspace Rust para interação e análise avançada de transa
 - Detectores especializados para diferentes tipos de eventos
 - Gerenciamento avançado de memória
 
+### 📝 [ethernity-logs](./crates/ethernity-logs/)
+**Envio padronizado de logs**
+- API simples para registrar logs em um endpoint Elasticsearch
+- Padroniza nível, mensagem e crate de origem
+
 
 ## Fluxo de Dados
 

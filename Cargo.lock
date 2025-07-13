@@ -1039,6 +1039,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ethernity-logs"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "reqwest",
+ "serde",
+ "thiserror 1.0.69",
+ "tokio",
+ "wiremock",
+]
+
+[[package]]
 name = "ethernity-rpc"
 version = "0.1.0"
 dependencies = [
