@@ -6,7 +6,7 @@ use crate::core::metrics::{
 };
 use crate::dex::{detect_swap_function, get_pair_address, RouterInfo, SwapFunction};
 use crate::filters::{FilterPipeline, SwapLogFilter};
-use crate::simulation::{simulate_transaction, SimulationConfig, SimulationOutcome};
+use crate::tx_logs::TxLogs;
 use crate::types::{AnalysisResult, Metrics, TransactionData};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -15,6 +15,7 @@ use ethernity_core::traits::RpcProvider;
 use ethers::abi::{AbiParser, Token};
 use ethers::prelude::{Http, Middleware, Provider, TransactionRequest};
 use ethers::types::BlockId;
+use ethers::types::Log;
 use ethers::utils::keccak256;
 use std::sync::Arc;
 use std::time::Duration;
@@ -33,18 +34,10 @@ impl crate::detectors::VictimDetector for UniswapV2Detector {
         rpc_endpoint: String,
         tx: TransactionData,
         block: Option<u64>,
-        outcome: SimulationOutcome,
+        outcome: TxLogs,
         router: RouterInfo,
     ) -> Result<AnalysisResult> {
-        analyze_uniswap_v2_with_outcome(
-            rpc_client,
-            rpc_endpoint,
-            tx,
-            block,
-            outcome,
-            router,
-        )
-        .await
+        analyze_uniswap_v2_with_logs(rpc_client, rpc_endpoint, tx, block, outcome, router).await
     }
 }
 
@@ -52,20 +45,18 @@ pub async fn analyze_uniswap_v2(
     rpc_client: Arc<dyn RpcProvider>,
     rpc_endpoint: String,
     tx: TransactionData,
+    logs: Vec<Log>,
     block: Option<u64>,
     router: RouterInfo,
 ) -> Result<AnalysisResult> {
-    let sim_config = SimulationConfig {
-        rpc_endpoint,
-        block_number: block,
-    };
-
-    let outcome = simulate_transaction(&sim_config, &tx).await?;
     let outcome = FilterPipeline::new()
         .push(SwapLogFilter)
-        .run(outcome)
+        .run(TxLogs {
+            tx_hash: None,
+            logs,
+        })
         .ok_or(anyhow!("No swap event"))?;
-    let SimulationOutcome { tx_hash, logs } = outcome;
+    let TxLogs { tx_hash, logs } = outcome;
 
     // Use provided router information when available
     let router_address = crate::dex::router_from_logs(&logs).unwrap_or(router.address);
@@ -186,16 +177,20 @@ pub async fn analyze_uniswap_v2(
 
     let path_tokens: Vec<Token> = path.iter().map(|a| Token::Address(*a)).collect();
 
-    let provider = Provider::<Http>::try_from(sim_config.rpc_endpoint.clone())?
-        .interval(Duration::from_millis(1));
+    let provider =
+        Provider::<Http>::try_from(rpc_endpoint.clone())?.interval(Duration::from_millis(1));
 
-    let swap_topic: H256 =
-        H256::from_slice(keccak256("Swap(address,uint256,uint256,uint256,uint256,address)").as_slice());
+    let swap_topic: H256 = H256::from_slice(
+        keccak256("Swap(address,uint256,uint256,uint256,uint256,address)").as_slice(),
+    );
     let pair_address = if let Some(addr) = pair_addr_opt {
         addr
     } else if let Some(factory) = router.factory {
         get_pair_address(&*rpc_client, factory, path[0], path[1]).await?
-    } else if let Some(swap_log) = logs.iter().find(|log| log.topics.get(0) == Some(&swap_topic)) {
+    } else if let Some(swap_log) = logs
+        .iter()
+        .find(|log| log.topics.get(0) == Some(&swap_topic))
+    {
         // Fallback to the pair address emitted in the first swap log that matches the Swap event
         swap_log.address
     } else {
@@ -291,7 +286,8 @@ pub async fn analyze_uniswap_v2(
         } else {
             let abi = AbiParser::default()
                 .parse_function("getAmountsIn(uint256,address[]) returns (uint256[])")?;
-            let data = abi.encode_input(&[Token::Uint(a_out), Token::Array(path_tokens.clone())])?;
+            let data =
+                abi.encode_input(&[Token::Uint(a_out), Token::Array(path_tokens.clone())])?;
             let tx_call = TransactionRequest::new()
                 .to(router.address)
                 .data(data.clone());
@@ -383,21 +379,21 @@ pub async fn analyze_uniswap_v2(
     })
 }
 
-/// Same analysis logic as [`analyze_uniswap_v2`] but uses a precomputed
-/// [`SimulationOutcome`] instead of performing a new simulation.
-pub async fn analyze_uniswap_v2_with_outcome(
+/// Same analysis logic as [`analyze_uniswap_v2`] but uses logs provided
+/// externamente, sem executar simulação local.
+pub async fn analyze_uniswap_v2_with_logs(
     rpc_client: Arc<dyn RpcProvider>,
     rpc_endpoint: String,
     tx: TransactionData,
     block: Option<u64>,
-    outcome: SimulationOutcome,
+    outcome: TxLogs,
     router: RouterInfo,
 ) -> Result<AnalysisResult> {
     let outcome = FilterPipeline::new()
         .push(SwapLogFilter)
         .run(outcome)
         .ok_or(anyhow!("No swap event"))?;
-    let SimulationOutcome { tx_hash, logs } = outcome;
+    let TxLogs { tx_hash, logs } = outcome;
 
     // Use provided router information when available
     let router_address = crate::dex::router_from_logs(&logs).unwrap_or(router.address);
@@ -518,16 +514,20 @@ pub async fn analyze_uniswap_v2_with_outcome(
 
     let path_tokens: Vec<Token> = path.iter().map(|a| Token::Address(*a)).collect();
 
-    let provider = Provider::<Http>::try_from(rpc_endpoint.clone())?
-        .interval(Duration::from_millis(1));
+    let provider =
+        Provider::<Http>::try_from(rpc_endpoint.clone())?.interval(Duration::from_millis(1));
 
-    let swap_topic: H256 =
-        H256::from_slice(keccak256("Swap(address,uint256,uint256,uint256,uint256,address)").as_slice());
+    let swap_topic: H256 = H256::from_slice(
+        keccak256("Swap(address,uint256,uint256,uint256,uint256,address)").as_slice(),
+    );
     let pair_address = if let Some(addr) = pair_addr_opt {
         addr
     } else if let Some(factory) = router.factory {
         get_pair_address(&*rpc_client, factory, path[0], path[1]).await?
-    } else if let Some(swap_log) = logs.iter().find(|log| log.topics.get(0) == Some(&swap_topic)) {
+    } else if let Some(swap_log) = logs
+        .iter()
+        .find(|log| log.topics.get(0) == Some(&swap_topic))
+    {
         swap_log.address
     } else {
         return Err(anyhow!("router does not expose factory"));
@@ -622,7 +622,8 @@ pub async fn analyze_uniswap_v2_with_outcome(
         } else {
             let abi = AbiParser::default()
                 .parse_function("getAmountsIn(uint256,address[]) returns (uint256[])")?;
-            let data = abi.encode_input(&[Token::Uint(a_out), Token::Array(path_tokens.clone())])?;
+            let data =
+                abi.encode_input(&[Token::Uint(a_out), Token::Array(path_tokens.clone())])?;
             let tx_call = TransactionRequest::new()
                 .to(router.address)
                 .data(data.clone());

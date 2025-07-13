@@ -40,13 +40,17 @@ async fn mempool_listener(
     rpc_client: Arc<EthernityRpcClient>,
     ws_url: String,
 ) -> Result<()> {
-    let stream = provider.subscribe_pending_txs().await?.transactions_unordered(usize::MAX);
+    let stream = provider
+        .subscribe_pending_txs()
+        .await?
+        .transactions_unordered(usize::MAX);
     println!("Escutando transações pendentes...");
 
     stream
         .for_each_concurrent(usize::MAX, |res| {
             let rpc_client = rpc_client.clone();
             let ws_url = ws_url.clone();
+            let provider = provider.clone();
             async move {
                 let tx = match res {
                     Ok(tx) => tx,
@@ -64,12 +68,22 @@ async fn mempool_listener(
                     nonce: tx.nonce,
                 };
 
-                match analyze_transaction(rpc_client, "http://148.251.183.245:8545".to_string(), tx_data, None).await {
-                    Ok(result) if result.potential_victim => {
-                        println!("possível vítima {:?}\n{:#?}", tx.hash, result.metrics);
+                if let Ok(Some(receipt)) = provider.get_transaction_receipt(tx.hash).await {
+                    match analyze_transaction(
+                        rpc_client.clone(),
+                        ws_url.clone(),
+                        tx_data,
+                        receipt.logs,
+                        receipt.block_number.map(|b| b.as_u64()),
+                    )
+                    .await
+                    {
+                        Ok(result) if result.potential_victim => {
+                            println!("possível vítima {:?}\n{:#?}", tx.hash, result.metrics);
+                        }
+                        Ok(_) => {}
+                        Err(err) => eprintln!("Erro ao analisar tx {:?}: {err}", tx.hash),
                     }
-                    Ok(_) => {}
-                    Err(err) => eprintln!("Erro ao analisar tx {:?}: {err}", tx.hash),
                 }
             }
         })

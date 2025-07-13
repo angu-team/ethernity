@@ -1,5 +1,5 @@
 use crate::dex::RouterInfo;
-use crate::simulation::SimulationOutcome;
+use crate::tx_logs::TxLogs;
 use crate::types::{AnalysisResult, TransactionData};
 use anyhow::Result;
 use async_trait::async_trait;
@@ -7,14 +7,14 @@ use ethernity_core::traits::RpcProvider;
 use std::sync::Arc;
 
 pub mod clusters;
-use clusters::uniswap_v2::{UniswapV2Detector, SwapV2ExactInDetector};
+use clusters::oneinch_aggregation_router_v6::OneInchAggregationRouterV6Detector;
+use clusters::oneinch_generic_router::OneInchGenericRouterDetector;
+use clusters::smart_router::custom::SmartRouterUniswapV3Detector;
+use clusters::smart_router::MulticallBytesDetector;
+use clusters::uniswap_universal_router::UniswapUniversalRouterDetector;
+use clusters::uniswap_v2::{SwapV2ExactInDetector, UniswapV2Detector};
 use clusters::uniswap_v3::UniswapV3Detector;
 use clusters::uniswap_v4::UniswapV4Detector;
-use clusters::smart_router::MulticallBytesDetector;
-use clusters::smart_router::custom::SmartRouterUniswapV3Detector;
-use clusters::oneinch_generic_router::OneInchGenericRouterDetector;
-use clusters::oneinch_aggregation_router_v6::OneInchAggregationRouterV6Detector;
-use clusters::uniswap_universal_router::UniswapUniversalRouterDetector;
 
 #[async_trait]
 pub trait VictimDetector: Send + Sync {
@@ -25,7 +25,7 @@ pub trait VictimDetector: Send + Sync {
         rpc_endpoint: String,
         tx: TransactionData,
         block: Option<u64>,
-        outcome: SimulationOutcome,
+        outcome: TxLogs,
         router: RouterInfo,
     ) -> Result<AnalysisResult>;
 }
@@ -59,7 +59,7 @@ impl DetectorRegistry {
         rpc_endpoint: String,
         tx: TransactionData,
         block: Option<u64>,
-        outcome: SimulationOutcome,
+        outcome: TxLogs,
         router: RouterInfo,
     ) -> Result<AnalysisResult> {
         let mut last_err = None;

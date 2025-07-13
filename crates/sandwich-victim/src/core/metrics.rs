@@ -33,7 +33,11 @@ pub fn simulate_sandwich_profit(amount_in: U256, reserve_in: U256, reserve_out: 
     let res_in_after_victim = res_in_after_front + amount_in;
     let res_out_after_victim = res_out_after_front - _victim_out;
     let back_out = constant_product_output(out_front, res_out_after_victim, res_in_after_victim);
-    if back_out > front { back_out - front } else { U256::zero() }
+    if back_out > front {
+        back_out - front
+    } else {
+        U256::zero()
+    }
 }
 
 pub fn constant_product_input(
@@ -51,5 +55,3 @@ pub fn constant_product_input(
     let numerator = reserve_in * amount_out;
     Some(numerator / denominator + U256::one())
 }
-
-

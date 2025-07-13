@@ -1,10 +1,11 @@
-use crate::detectors::{DetectorRegistry};
+use crate::detectors::DetectorRegistry;
 use crate::dex::{identify_router, router_from_logs, RouterInfo};
 use crate::filters::{FilterPipeline, SwapLogFilter};
-use crate::simulation::{simulate_transaction, SimulationConfig};
+use crate::tx_logs::TxLogs;
 use crate::types::{AnalysisResult, TransactionData};
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use ethernity_core::traits::RpcProvider;
+use ethers::types::Log;
 use std::sync::Arc;
 
 #[derive(Debug, thiserror::Error)]
@@ -21,14 +22,13 @@ pub async fn analyze_transaction(
     rpc_client: Arc<dyn RpcProvider>,
     rpc_endpoint: String,
     tx: TransactionData,
+    logs: Vec<Log>,
     block: Option<u64>,
 ) -> Result<AnalysisResult> {
-    let sim_config = SimulationConfig {
-        rpc_endpoint: rpc_endpoint.clone(),
-        block_number: block,
+    let outcome = TxLogs {
+        tx_hash: None,
+        logs,
     };
-
-    let outcome = simulate_transaction(&sim_config, &tx).await?;
     let outcome = FilterPipeline::new()
         .push(SwapLogFilter)
         .run(outcome)
@@ -43,4 +43,3 @@ pub async fn analyze_transaction(
         .await
         .map_err(|e| anyhow!(e))
 }
-
