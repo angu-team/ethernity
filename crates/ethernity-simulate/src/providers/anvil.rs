@@ -1,13 +1,17 @@
 use std::time::{Duration, Instant};
 
-use ethers::utils::{Anvil, AnvilInstance};
-use ethers::providers::{Provider, Http, Middleware};
-use ethers::types::{TransactionReceipt, transaction::eip2718::TypedTransaction};
-use tokio::sync::Mutex;
 use async_trait::async_trait;
+use ethers::providers::{Http, Middleware, Provider};
+use ethers::types::{transaction::eip2718::TypedTransaction, TransactionReceipt};
+use ethers::utils::{Anvil, AnvilInstance};
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use crate::{errors::{Result, SimulationError}, traits::{SimulationProvider, SimulationSession}};
+use crate::{
+    errors::{Result, SimulationError},
+    logger::{log_error, log_warn},
+    traits::{SimulationProvider, SimulationSession},
+};
 
 /// Sessão de simulação utilizando o Anvil
 pub struct AnvilSession {
@@ -28,27 +32,43 @@ impl AnvilSession {
 #[async_trait]
 impl SimulationSession for Mutex<AnvilSession> {
     async fn send_transaction(&self, tx: &TypedTransaction) -> Result<TransactionReceipt> {
-        let provider = {
+        let (closed, provider) = {
             let guard = self.lock().await;
-            if guard.closed {
-                return Err(SimulationError::SessionClosed);
-            }
-            guard.provider.clone()
+            (guard.closed, guard.provider.clone())
         };
-        let pending = provider
-            .send_transaction(tx.clone(), None)
-            .await
-            .map_err(|e| SimulationError::SendTransaction(e.to_string()))?;
-        let receipt = pending
-            .await
-            .map_err(|e| SimulationError::AwaitTransaction(e.to_string()))?
-            .ok_or_else(|| SimulationError::AwaitTransaction("sem recibo".into()))?;
+        if closed {
+            log_warn("tentativa de uso de sessao encerrada").await;
+            return Err(SimulationError::SessionClosed);
+        }
+
+        let pending = match provider.send_transaction(tx.clone(), None).await {
+            Ok(p) => p,
+            Err(e) => {
+                log_error(&format!("falha ao enviar transacao: {}", e)).await;
+                return Err(SimulationError::SendTransaction(e.to_string()));
+            }
+        };
+
+        let receipt = match pending.await {
+            Ok(opt) => match opt {
+                Some(r) => r,
+                None => {
+                    log_error("falha ao aguardar transacao: sem recibo").await;
+                    return Err(SimulationError::AwaitTransaction("sem recibo".into()));
+                }
+            },
+            Err(e) => {
+                log_error(&format!("falha ao aguardar transacao: {}", e)).await;
+                return Err(SimulationError::AwaitTransaction(e.to_string()));
+            }
+        };
         Ok(receipt)
     }
 
     async fn close(&self) {
         let mut guard = self.lock().await;
         if guard.closed {
+            log_warn("tentativa de encerrar sessao ja fechada").await;
             return;
         }
         guard.closed = true;
@@ -64,7 +84,12 @@ pub struct AnvilProvider;
 impl SimulationProvider for AnvilProvider {
     type Session = Mutex<AnvilSession>;
 
-    async fn create_session(&self, rpc_url: &str, block_number: Option<u64>, timeout: Duration) -> Result<Self::Session> {
+    async fn create_session(
+        &self,
+        rpc_url: &str,
+        block_number: Option<u64>,
+        timeout: Duration,
+    ) -> Result<Self::Session> {
         let mut anvil = Anvil::new()
             .fork(rpc_url)
             .args(&["--auto-impersonate".to_string()]);
@@ -73,9 +98,13 @@ impl SimulationProvider for AnvilProvider {
         }
         let anvil = anvil.spawn();
 
-        let provider = Provider::<Http>::try_from(anvil.endpoint())
-            .map_err(|e| SimulationError::ProviderCreation(e.to_string()))?
-            .interval(Duration::from_millis(1));
+        let provider = match Provider::<Http>::try_from(anvil.endpoint()) {
+            Ok(p) => p.interval(Duration::from_millis(1)),
+            Err(e) => {
+                log_error(&format!("falha ao criar provider do anvil: {}", e)).await;
+                return Err(SimulationError::ProviderCreation(e.to_string()));
+            }
+        };
 
         Ok(Mutex::new(AnvilSession {
             id: Uuid::new_v4(),

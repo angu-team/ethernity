@@ -5,11 +5,12 @@
  */
 
 pub mod errors;
-pub mod traits;
+mod logger;
 pub mod providers;
 pub mod sessions;
+pub mod traits;
 
 pub use errors::*;
-pub use traits::*;
 pub use providers::*;
 pub use sessions::*;
+pub use traits::*;
